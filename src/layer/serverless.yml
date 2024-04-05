@@ -1,0 +1,4 @@
+shared:
+  path: src/layer/shared
+dependencies:
+  path: src/layer/dependencies

@@ -1,0 +1,5 @@
+type: object
+properties:
+  email:
+    type: string
+    description: User email.

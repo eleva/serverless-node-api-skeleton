@@ -1,0 +1,37 @@
+version: ${env:STAGE_NAME}
+servers:
+    - url: my-api
+      description: ${env:STAGE_NAME}
+title: 'My API'
+description: 'My API'
+models:
+  #ERRORS
+  - name: "BadRequestResponse"
+    description: "Bad/Invalid request error response"
+    contentType: "application/json"
+    schema: ${file(./doc/models/BadRequestResponse.yml)}
+  - name: "ErrorResponse"
+    description: "Generic error response"
+    contentType: "application/json"
+    schema: ${file(./doc/models/ErrorResponse.yml)}
+  #HELLO
+  - name: "HelloResponse"
+    description: "Hello response model"
+    contentType: "application/json"
+    schema: ${file(./doc/models/HelloResponse.yml)}
+  #USER
+  - name: "UserRequest"
+    description: "User request model"
+    contentType: "application/json"
+    schema: ${file(./doc/models/UserRequest.yml)}
+  - name: "UserListResponse"
+    description: "User list response model"
+    contentType: "application/json"
+    schema: ${file(./doc/models/UserListResponse.yml)}
+  - name: "UserResponse"
+    description: "User response model"
+    contentType: "application/json"
+    schema: ${file(./doc/models/UserResponse.yml)}
+
+
+

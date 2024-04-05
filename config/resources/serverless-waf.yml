@@ -1,0 +1,136 @@
+Resources:
+  WAFv2WebACL:
+    Type: "AWS::WAFv2::WebACL"
+    Properties:
+      DefaultAction:
+        Allow: {}
+      Description: WebACL-${self:custom.service}-${self:custom.stage}
+      Name: WebACL-${self:custom.service}-${self:custom.stage}
+      Rules:
+        -
+          Name: AWS-AWSManagedRulesAmazonIpReputationList-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 0
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesAmazonIpReputationList
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAmazonIpReputationList
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesAnonymousIpList-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 1
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesAnonymousIpList
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAnonymousIpList
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesBotControlRuleSet-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 2
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesBotControlRuleSet
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesBotControlRuleSet
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesAdminProtectionRuleSet-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 3
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesAdminProtectionRuleSet
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAdminProtectionRuleSet
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesCommonRuleSet-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 4
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesCommonRuleSet
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesCommonRuleSet
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesKnownBadInputsRuleSet-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 5
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
+            SampledRequestsEnabled: true
+        -
+          Name: AWS-AWSManagedRulesSQLiRuleSet-${self:custom.service}-${self:custom.stage}
+          OverrideAction:
+            Count: {}
+          Priority: 7
+          Statement:
+            ManagedRuleGroupStatement:
+              Name: AWSManagedRulesSQLiRuleSet
+              VendorName: AWS
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesSQLiRuleSet
+            SampledRequestsEnabled: true
+      Scope: REGIONAL
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: WebACL-MydApi
+        SampledRequestsEnabled: true
+
+  LogGroupAPIRestPublic:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: aws-waf-logs-${self:custom.service}-${self:custom.stage}
+      RetentionInDays: 365
+
+  WAFv2LoggingConfiguration:
+    DependsOn:
+      - WAFv2WebACL
+      - LogGroupAPIRestPublic
+    Type: "AWS::WAFv2::LoggingConfiguration"
+    Properties:
+      LogDestinationConfigs:
+        - !GetAtt LogGroupAPIRestPublic.Arn
+      ResourceArn: !GetAtt WAFv2WebACL.Arn
+
+  WAFv2WebACLAssociation:
+    DependsOn:
+      - WAFv2WebACL
+    Type: "AWS::WAFv2::WebACLAssociation"
+    Properties:
+      ResourceArn:
+        Fn::Join:
+          - ''
+          - - 'arn:aws:apigateway:eu-west-1::/restapis'
+            - "/"
+            - !Ref MyApiGW
+            - "/stages/"
+            - !Sub ${self:custom.stage}
+      WebACLArn: !GetAtt WAFv2WebACL.Arn

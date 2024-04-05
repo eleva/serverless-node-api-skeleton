@@ -1,0 +1,29 @@
+name: aws
+deploymentMethod: direct
+# Block public access on deployment bucket
+deploymentBucket:
+  blockPublicAccess: true
+# The AWS region in which to deploy (us-east-1 is the default)
+region: ${env:AWS_REGION}
+runtime: nodejs18.x
+environment:
+  # environment variables
+  APP_ENV: ${env:APP_ENV}
+  DB_HOST: ${env:DB_HOST}
+  DB_DATABASE: ${env:DB_DATABASE}
+  DB_USERNAME: ${env:DB_USERNAME}
+  DB_PASSWORD: ${env:DB_PASSWORD}
+## VPC Configuration
+vpc:
+  securityGroupIds:
+    - ${env:SG1}
+  subnetIds:
+    - ${env:SUBNET1}
+    - ${env:SUBNET2}
+    - ${env:SUBNET3}
+# Enable lambda tracing with xray
+tracing:
+  lambda: true
+layers:
+  - !Ref SharedLambdaLayer
+  - !Ref DependenciesLambdaLayer

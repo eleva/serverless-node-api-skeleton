@@ -1,0 +1,49 @@
+service: my-api
+frameworkVersion: '3'
+
+## Use .env
+useDotenv: true
+
+## Package individually each function
+package:
+  individually: true
+
+## Apply plugins
+#local environment,documentation, monitoring cache, tests
+plugins: ${file(./config/serverless-plugins.yml)}
+## Define shared layers
+layers: ${file(./src/layer/serverless.yml)}
+## Define provider and globals
+provider: ${file(./config/serverless-provider.yml)}
+
+## Create resources with separate CloudFormation templates
+#resources:
+  ## Cognito
+  #- ${file(./config/resources/serverless-cognito-user-pool.yml)}
+  #- ${file(./config/resources/serverless-cognito-identity-pool.yml)}
+  ## WAF
+  #- ${file(./../../config/resources/serverless-waf.yml)}
+
+## Define atomic functions
+functions:
+  ## Hello function
+  - ${file(./src/function/hello/serverless.yml)}
+  ## Users functions
+  ### Get users
+  - ${file(./src/function/user/get/serverless.yml)}
+  ### Post user
+  - ${file(./src/function/user/post/serverless.yml)}
+  ### Get user by id
+  - ${file(./src/function/user/_id/get/serverless.yml)}
+  ### Put user by id
+  - ${file(./src/function/user/_id/put/serverless.yml)}
+  ### Delete user by id
+  - ${file(./src/function/user/_id/delete/serverless.yml)}
+
+## Define custom
+custom: ${file(./config/serverless-custom.yml)}
+
+
+
+
+

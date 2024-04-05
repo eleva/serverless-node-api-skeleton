@@ -1,0 +1,39 @@
+hello:
+  handler: src/function/hello/index.handler #function handler
+  package: #package patterns
+    include:
+      - "!**/*"
+      - src/function/hello/**
+  events: #events
+    #keep warm event
+    - schedule:
+        rate: rate(5 minutes)
+        enabled: ${strToBool(${self:custom.scheduleEnabled.${env:STAGE_NAME}})}
+        input:
+          warmer: true
+    #api gateway event
+    - http:
+        path: /hello #api endpoint path
+        method: 'GET' #api endpoint method
+        cors: true
+        caching: #cache
+          enabled: false
+        documentation:
+          summary: "/hello"
+          description: "Just a sample GET to say hello"
+          methodResponses:
+            - statusCode: 200
+              responseBody:
+                description: "A successful response"
+              responseModels:
+                application/json: "HelloResponse"
+            - statusCode: 500
+              responseBody:
+                description: "Internal Server Error"
+              responseModels:
+                application/json: "ErrorResponse"
+            - statusCode: 400
+              responseBody:
+                description: "Request error"
+              responseModels:
+                application/json: "BadRequestResponse"

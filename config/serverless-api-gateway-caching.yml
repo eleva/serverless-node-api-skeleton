@@ -1,0 +1,9 @@
+enabled: false
+apiGatewayIsShared: false
+#clusterSize: '0.5' # defaults to '0.5'
+ttlInSeconds: 300 # defaults to the maximum allowed: 3600
+dataEncrypted: true # defaults to false
+#perKeyInvalidation:
+#  requireAuthorization: true # default is true
+#  handleUnauthorizedRequests: Ignore # default is "IgnoreWithWarning".
+#endpointsInheritCloudWatchSettingsFromStage: true # default is true

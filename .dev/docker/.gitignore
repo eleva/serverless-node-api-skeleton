@@ -1,0 +1,8 @@
+# env
+.env
+
+# volumes
+volumes/databases/*
+!volumes/databases/.gitkeep
+volumes/logs/nginx/*
+!volumes/logs/nginx/.gitkeep

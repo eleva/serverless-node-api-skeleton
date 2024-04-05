@@ -1,0 +1,17 @@
+## Set service name
+service: ${env:SERVICE_NAME}
+## Set stage name
+stage: ${env:STAGE_NAME}
+## Set monitoring dashboard and alarms with slic-watch
+slicWatch: ${file(./config/serverless-slic-watch.yml)}
+## Enable schedulers based on stage
+scheduleEnabled: ${file(./config/serverless-schedule-enabled.yml)}
+## Documentation globals
+documentation: ${file(./doc/serverless.yml)}
+## Gateway caching definitions
+apiGatewayCaching: ${file(./config/serverless-api-gateway-caching.yml)}
+## Prune to reduce old lambda version and layer footprint
+prune: ${file(./config/serverless-prune.yml)}
+## Use jetpack with concurrency 10 to package faster
+jetpack:
+  concurrency: 10

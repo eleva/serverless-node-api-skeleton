@@ -1,0 +1,3 @@
+automatic: true #allow automatic prune
+includeLayers: true #allow layers prune
+number: 3 #retain at lease 3 version

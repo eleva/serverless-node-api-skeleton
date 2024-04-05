@@ -1,0 +1,4 @@
+local: false
+dev: false
+uat: false
+v1: true

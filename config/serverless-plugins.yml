@@ -1,0 +1,7 @@
+- serverless-offline #local environment
+- serverless-openapi-documenter #documentation
+- serverless-slic-watch-plugin #monitoring
+- serverless-api-gateway-caching #cache
+- serverless-jest-plugin #tests
+- serverless-prune-plugin #reduce old version footprint
+- serverless-jetpack #use jetpack as packager

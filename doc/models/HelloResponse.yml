@@ -1,0 +1,10 @@
+type: object
+properties:
+  message:
+    type: string
+    description: Just a simple welcome message.
+  input:
+    type: object
+    description: Input event from API Gateway.
+
+

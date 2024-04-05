@@ -1,0 +1,1719 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'CloudFormation to deploy VPC, 3 public subnet, 3 private subnet, 1 NATGW (AZ-1A), 1 security group for LAMBDA, 1 RDS, 1 Codebuild Project, 3 Pipelines, 1 bucket, 1 Coudfront Distribution. Create Parameter DB-PASSWORD in ParameterStore, and load SSL certificate
+  before launch template'
+
+Parameters:
+  ServerlessUserKey:
+    Description: 'Name of Parameter Store parameter to define AWS user key to be used to deploy'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'SERVERLESS-USER-KEY'
+  ServerlessUserSecret:
+    Description: 'Name of Parameter Store parameter to define AWS user secret to be used to deploy'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'SERVERLESS-USER-SECRET'
+  ResourceName:
+    Description: Prefix for created AWS Resources (ex 'my-api-VPC')
+    Type: String
+    Default: 'my-api'
+  AccountID:
+    Description: AWS Account ID
+    Type: String
+    Default: ""
+  AWSRegion:
+    Type: String
+    Default: 'eu-west-1'
+  CDIRBLOCKVPC:
+    Type: String
+    Default:  '10.23.0.0/16'
+  PublicSubnet1A:
+    Type: String
+    Default:  '10.23.16.0/24'
+  PublicSubnet1B:
+    Type: String
+    Default:  '10.23.32.0/24'
+  PublicSubnet1C:
+    Type: String
+    Default:  '10.23.48.0/24'
+  PrivateSubnet1A:
+    Type: String
+    Default:  '10.23.64.0/24'
+  PrivateSubnet1B:
+    Type: String
+    Default:  '10.23.80.0/24'
+  PrivateSubnet1C:
+    Type: String
+    Default:  '10.23.96.0/24'
+  DBInstanceName:
+    Description: Name of DB Instance
+    Type: String
+    Default: "my"
+  DBInstanceClass:
+    Description: DB Instance Class
+    Type: String
+    Default: "db.t3.micro"
+  DBNameSchema:
+    Description: DB Name Schema
+    Type: String
+    Default: "my"
+  MasterUsername:
+    Description: DB Master UserName
+    Type: String
+    Default: "db_master"
+  DBPassword:
+    Description: 'Name of Parameter Store parameter to define db password that must contain only Upper-case, Lower-case, Digits, Underline characters'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'DB-PASSWORD'
+  EngineVersionDB:
+    Description: Version of MySQL DataBase
+    Type: String
+    Default: "8.0.32"
+  EndPointEmailRDSAlarm:
+    Description: email address to alarm notification
+    Type: String
+    Default: "dev@eleva.it"
+  EndPointEmailRDSNotification:
+    Description: email address to other notification
+    Type: String
+    Default: "dev@eleva.it"
+  CodeBuildProject:
+    Type: String
+    Default: my-api-build
+  CodeBuildImage:
+    Type: String
+    Default: "aws/codebuild/standard:7.0"
+  CodeBuildSpecFolder:
+    Type: String
+    Default: ".dev/pipeline/buildspec.yml"
+  GitHubRepo:
+    Type: String
+    Default: ""
+  PipelineNameDEV:
+    Type: String
+    Default: "my-api-dev"
+  GitHubBranchNameDEV:
+    Type: String
+    Default: "main" #develop
+  #PipelineNameStaging:
+  #  Type: String
+  #  Default: "staging"
+  #GitHubBranchNameStaging:
+  #  Type: String
+  #  Default: "main" #release/staging
+  #PipelineNameV1:
+  #  Type: String
+  #  Default: "v1"
+  #GitHubBranchNameV1:
+  #  Type: String
+  #  Default: "main" #release/v1
+  BuildProjectName:
+    Type: String
+    Default: my-api-build
+  ConnectionArn:
+    Type: String
+    Default: ""
+  BucketName:
+    Type: String
+    Default: "my-api-doc"
+  CustomerDomain:
+    Description: The domain name of customer
+    Type: String
+    Default: my-api
+  #AcmCertificateArn:
+  #  Description: Arn of certificate SSL (N. Virginia)
+  #  Type: String
+  #  Default: "xxxxxxxxx"
+
+Resources:
+
+  #### ISOLATED VPC ####
+  Vpc:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Sub '${CDIRBLOCKVPC}'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: 'default'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName}-VPC'
+
+  VpcSubnetPublic1A:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PublicSubnet1A}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Public Subnet 1A'
+
+  VpcSubnetPublic1B:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PublicSubnet1B}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '1'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Public Subnet 1B'
+
+  VpcSubnetPublic1C:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PublicSubnet1C}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '2'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Public Subnet 1C'
+
+  VpcSubnetPrivate1A:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PrivateSubnet1A}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Private Subnet 1A'
+
+  VpcSubnetPrivate1B:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PrivateSubnet1B}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '1'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Private Subnet 1B'
+
+  VpcSubnetPrivate1C:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Sub '${PrivateSubnet1C}'
+      MapPublicIpOnLaunch: false
+      VpcId:
+        Ref: 'Vpc'
+      AvailabilityZone:
+        Fn::Select:
+          - '2'
+          - Fn::GetAZs:
+              Ref: 'AWS::Region'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Private Subnet 1C'
+
+
+  VpcIgw:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName}-IGW'
+
+  VpcIgwAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId:
+        Ref: 'VpcIgw'
+      VpcId:
+        Ref: 'Vpc'
+
+  VpcEipNatGw0:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+
+  VpcNatGw0:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId:
+        Ref: 'VpcSubnetPublic1A'
+      ConnectivityType: 'public'
+      AllocationId:
+        Fn::GetAtt:
+          - 'VpcEipNatGw0'
+          - 'AllocationId'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName}-NAT-1A'
+
+  VpcRouteTablePublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId:
+        Ref: 'Vpc'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Public Route Table'
+
+  VpcRouteTable0Assoc0:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePublic'
+      SubnetId:
+        Ref: 'VpcSubnetPublic1A'
+
+  VpcRouteTable0Assoc1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePublic'
+      SubnetId:
+        Ref: 'VpcSubnetPublic1B'
+
+  VpcRouteTable0Assoc2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePublic'
+      SubnetId:
+        Ref: 'VpcSubnetPublic1C'
+
+  VpcRouteTable0VpcRoute0:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId:
+        Ref: 'VpcRouteTablePublic'
+      GatewayId:
+        Ref: 'VpcIgw'
+
+  VpcRouteTablePrivate1A:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId:
+        Ref: 'Vpc'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${ResourceName} Private Route Table 1A'
+
+  VpcRouteTable1Assoc3:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePrivate1A'
+      SubnetId:
+        Ref: 'VpcSubnetPrivate1A'
+
+  VpcRouteTable1VpcRoute0:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId:
+        Ref: 'VpcRouteTablePrivate1A'
+      NatGatewayId:
+        Ref: 'VpcNatGw0'
+
+  VpcRouteTable1Assoc3a:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePrivate1A'
+      SubnetId:
+        Ref: 'VpcSubnetPrivate1B'
+
+  VpcRouteTable1Assoc3b:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'VpcRouteTablePrivate1A'
+      SubnetId:
+        Ref: 'VpcSubnetPrivate1C'
+
+  #### SGLamnda ####
+
+  SGlambda:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "SG for lambda"
+      GroupName: !Sub "${ResourceName}-SG-lambda"
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${ResourceName}-SG-lambda"
+
+  #### RDS ####
+
+  SNSRDSAlarmTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      DisplayName: ""
+      TopicName: !Sub "${ResourceName}-${AccountID}-RDS-CRITICAL"
+
+  SNSRDSNotificationsTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      DisplayName: ""
+      TopicName: !Sub "${ResourceName}-${AccountID}-RDS-NOTIFICATIONS"
+
+  SNSRDSAlarmTopicPolicy:
+    DependsOn:
+      - SNSRDSAlarmTopic
+    Type: "AWS::SNS::TopicPolicy"
+    Properties:
+      PolicyDocument:
+        Version: '2008-10-17'
+        Id: __default_policy_ID
+        Statement:
+          - Sid: __default_statement_ID
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:AddPermission'
+              - 'SNS:RemovePermission'
+              - 'SNS:DeleteTopic'
+              - 'SNS:Subscribe'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:Publish'
+            Resource:
+              - !Sub 'arn:aws:sns:${AWSRegion}:${AccountID}:${ResourceName}-RDS-CRITICAL'
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner': !Sub '${AccountID}'
+      Topics:
+        - !Ref SNSRDSAlarmTopic
+
+  SNSRDSNotificationsTopicPolicy:
+    DependsOn:
+      - SNSRDSNotificationsTopic
+    Type: "AWS::SNS::TopicPolicy"
+    Properties:
+      PolicyDocument:
+        Version: '2008-10-17'
+        Id: __default_policy_ID
+        Statement:
+          - Sid: __default_statement_ID
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:AddPermission'
+              - 'SNS:RemovePermission'
+              - 'SNS:DeleteTopic'
+              - 'SNS:Subscribe'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:Publish'
+            Resource:
+              - !Sub 'arn:aws:sns:${AWSRegion}:${AccountID}:${ResourceName}-RDS-NOTIFICATIONS'
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner': !Sub '${AccountID}'
+      Topics:
+        - !Ref SNSRDSNotificationsTopic
+
+  SNSRDSAlarmSubscription:
+    DependsOn:
+      - SNSRDSAlarmTopic
+      - SNSRDSAlarmTopicPolicy
+    Type: "AWS::SNS::Subscription"
+    Properties:
+      TopicArn: !Ref SNSRDSAlarmTopic
+      Endpoint: !Sub "${EndPointEmailRDSAlarm}"
+      Protocol: "email"
+      Region: !Sub ${AWSRegion}
+
+  SNSRDSNotificationsSubscription:
+    DependsOn:
+      - SNSRDSNotificationsTopic
+      - SNSRDSNotificationsTopicPolicy
+    Type: "AWS::SNS::Subscription"
+    Properties:
+      TopicArn: !Ref SNSRDSNotificationsTopic
+      Endpoint: !Sub "${EndPointEmailRDSNotification}"
+      Protocol: "email"
+      Region: !Sub ${AWSRegion}
+
+  IAMRDSMonitoringRole:
+    DependsOn:
+      - SNSRDSAlarmTopicPolicy
+      - SNSRDSNotificationsTopicPolicy
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/"
+      RoleName: !Sub "${ResourceName}-rds-monitoring-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - monitoring.rds.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+
+  RDSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Security Group RDS"
+      GroupName: !Sub "RDS - ${ResourceName}"
+      Tags:
+        -
+          Key: "Name"
+          Value: !Sub "RDS - ${ResourceName}"
+      VpcId: !Ref  Vpc
+      SecurityGroupIngress:
+        -
+          SourceSecurityGroupId: !Ref SGlambda
+          Description: "Security Group LAMBDA"
+          IpProtocol: "tcp"
+          FromPort: 3306
+          ToPort: 3306
+
+      SecurityGroupEgress:
+        -
+          CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+
+  RDSDBParameterGroup:
+    Type: "AWS::RDS::DBParameterGroup"
+    Properties:
+      Description: !Sub "${ResourceName}-mysql8"
+      Family: "mysql8.0"
+      Parameters:
+        character_set_client: "utf8mb4"
+        character_set_connection: "utf8mb4"
+        character_set_database: "utf8mb4"
+        character_set_filesystem: "utf8mb4"
+        character_set_results: "utf8mb4"
+        character_set_server: "utf8mb4"
+        sql_mode: "STRICT_ALL_TABLES"
+        validate-password: "FORCE_PLUS_PERMANENT"
+        validate_password_length: "32"
+        validate_password_mixed_case_count: "1"
+        validate_password_number_count: "1"
+        validate_password_policy: "STRONG"
+        validate_password_special_char_count: "1"
+        slow_query_log: "0"
+        general_log: "0"
+
+  RDSDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnet Group RDS"
+      DBSubnetGroupName: !Sub "${ResourceName}-DBSubnet"
+      SubnetIds:
+        # Use public if PubliclyAccessible is set to true
+        # !Ref VpcSubnetPublic1A
+        # !Ref VpcSubnetPublic1B
+        # !Ref VpcSubnetPublic1C
+        # Use private if you have a VPN
+        - !Ref VpcSubnetPrivate1A
+        - !Ref VpcSubnetPrivate1B
+        - !Ref VpcSubnetPrivate1C
+
+  RDSDBInstance:
+    DependsOn:
+      - IAMRDSMonitoringRole
+      - RDSSecurityGroup
+      - RDSDBParameterGroup
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBInstanceIdentifier: !Sub "${DBInstanceName}"
+      AllocatedStorage: 20
+      DBInstanceClass: !Sub "${DBInstanceClass}"
+      Engine: "mysql"
+      MasterUsername: "db_master"
+      MasterUserPassword: !Sub "${DBPassword}"
+      DBName: !Sub "${DBNameSchema}"
+      PreferredBackupWindow: "00:00-00:30"
+      BackupRetentionPeriod: 35
+      AvailabilityZone: !Sub "${AWSRegion}a"
+      PreferredMaintenanceWindow: "mon:02:00-mon:02:30"
+      MultiAZ: false
+      EngineVersion: !Sub "${EngineVersionDB}"
+      AutoMinorVersionUpgrade: true
+      LicenseModel: "general-public-license"
+      PubliclyAccessible: false #set to true if you want publicly accessible!
+      StorageType: "gp2"
+      Port: 3306
+      StorageEncrypted: true
+      CopyTagsToSnapshot: true
+      MonitoringInterval: 60
+      EnableIAMDatabaseAuthentication: false
+      EnablePerformanceInsights: false
+      DeletionProtection: true
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      MaxAllocatedStorage: 100
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      OptionGroupName: "default:mysql-8-0"
+      MonitoringRoleArn: !GetAtt IAMRDSMonitoringRole.Arn
+      EnableCloudwatchLogsExports:
+        - "audit"
+        - "error"
+        - "general"
+        - "slowquery"
+
+  RDSAlarmEventSubscription:
+    Type: "AWS::RDS::EventSubscription"
+    Properties:
+      SourceType: "db-instance"
+      SnsTopicArn: !Ref SNSRDSAlarmTopic
+      SourceIds:
+        - !Ref RDSDBInstance
+      EventCategories:
+        - "availability"
+        - "deletion"
+        - "failure"
+        - "low storage"
+        - "recovery"
+      Enabled: true
+
+  RDSNotificationsEventSubscription:
+    Type: "AWS::RDS::EventSubscription"
+    Properties:
+      SourceType: "db-instance"
+      SnsTopicArn: !Ref SNSRDSNotificationsTopic
+      SourceIds:
+        - !Ref RDSDBInstance
+      EventCategories:
+        - "configuration change"
+        - "maintenance"
+        - "notification"
+      Enabled: true
+
+  ##### CODEBUILD ####
+
+  CodebuildSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "${ResourceName}-codebuild-security-group"
+      GroupName: !Sub "${ResourceName}-codebuild-sg"
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        IpProtocol: "-1"
+        Description: ""
+        CidrIp: "0.0.0.0/0"
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${ResourceName}-codebuild-sg"
+
+  IAMManagedPolicyCodeBuildCloudWatchLog:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildCloudWatchLogsPolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Resource:
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:${ResourceName}-codebuild-log"
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:${ResourceName}-codebuild-log:*"
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+
+  IAMManagedPolicyCodeBuild:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Resource:
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:/aws/codebuild/${CodeBuildProject}"
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:/aws/codebuild/${CodeBuildProject}:*"
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+          - Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::codepipeline-${AWSRegion}-*'
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:GetBucketAcl'
+              - 's3:GetBucketLocation'
+          - Effect: Allow
+            Action:
+              - 'codebuild:CreateReportGroup'
+              - 'codebuild:CreateReport'
+              - 'codebuild:UpdateReport'
+              - 'codebuild:BatchPutTestCases'
+              - 'codebuild:BatchPutCodeCoverages'
+            Resource:
+              - !Sub "arn:aws:codebuild:${AWSRegion}:${AccountID}:report-group/${CodeBuildProject}-*"
+
+  IAMManagedPolicyCodeBuildVpcPolicy:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildVpcPolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateNetworkInterface'
+              - 'ec2:DescribeDhcpOptions'
+              - 'ec2:DescribeNetworkInterfaces'
+              - 'ec2:DeleteNetworkInterface'
+              - 'ec2:DescribeSubnets'
+              - 'ec2:DescribeSecurityGroups'
+              - 'ec2:DescribeVpcs'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateNetworkInterfacePermission'
+            Resource: !Sub 'arn:aws:ec2:${AWSRegion}:${AccountID}:network-interface/*'
+            Condition:
+              StringEquals:
+                'ec2:Subnet':
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${VpcSubnetPrivate1A}"
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${VpcSubnetPrivate1B}"
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${VpcSubnetPrivate1C}"
+                'ec2:AuthorizedService': "codebuild.amazonaws.com"
+
+  IAMRoleCodeBuildServiceRole:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuild
+      - IAMManagedPolicyCodeBuildVpcPolicy
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "AWSCodeBuildServiceRole-${AWSRegion}-${CodeBuildProject}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Ref IAMManagedPolicyCodeBuildCloudWatchLog
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildVpcPolicy-${CodeBuildProject}-${AWSRegion}"
+
+  IAMRoleCodeBuildVpcPolicy:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildVpcPolicy
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuildVpcPolicy
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "codebuild-${CodeBuildProject}-service-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Ref IAMManagedPolicyCodeBuildVpcPolicy
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildCloudWatchLogsPolicy-${CodeBuildProject}-${AWSRegion}"
+
+  AWSCodeBuildProject:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuild
+      - IAMManagedPolicyCodeBuildVpcPolicy
+      - IAMRoleCodeBuildVpcPolicy
+      - SGlambda
+      - VpcSubnetPrivate1A
+      - VpcSubnetPrivate1B
+      - VpcSubnetPrivate1C
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Artifacts:
+        EncryptionDisabled: false
+        Name: !Sub ${CodeBuildProject}
+        Packaging: NONE
+        Type: CODEPIPELINE
+      BadgeEnabled: false
+      Cache:
+        Type: NO_CACHE
+      EncryptionKey: !Sub "arn:aws:kms:${AWSRegion}:${AccountID}:alias/aws/s3"
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          -
+            Name: APP_ENV
+            Type: PLAINTEXT
+            Value: !Sub "prod"
+          -
+            Name: STAGE_NAME
+            Type: PLAINTEXT
+            Value: !Sub "dev"
+          -
+            Name: AWS_KEY
+            Type: PLAINTEXT
+            Value: !Sub "${ServerlessUserKey}"
+          -
+            Name: AWS_SECRET
+            Type: PLAINTEXT
+            Value: !Sub "${ServerlessUserSecret}"
+          -
+            Name: AWS_REGION
+            Type: PLAINTEXT
+            Value: !Sub "${AWSRegion}"
+          -
+            Name: DOC_BUCKET
+            Type: PLAINTEXT
+            Value: !Sub "${BucketName}"
+          -
+            Name: SG1
+            Type: PLAINTEXT
+            Value: !Ref SGlambda
+          -
+            Name: SUBNET1
+            Type: PLAINTEXT
+            Value: !Ref VpcSubnetPrivate1A
+          -
+            Name: SUBNET2
+            Type: PLAINTEXT
+            Value: !Ref VpcSubnetPrivate1B
+          -
+            Name: SUBNET3
+            Type: PLAINTEXT
+            Value: !Ref VpcSubnetPrivate1C
+          -
+            Name: DB_HOST
+            Type: PLAINTEXT
+            Value: !GetAtt RDSDBInstance.Endpoint.Address
+          -
+            Name: DB_DATABASE
+            Type: PLAINTEXT
+            Value: !Sub "my"
+          -
+            Name: DB_USERNAME
+            Type: PLAINTEXT
+            Value: !Sub "db_master"
+          -
+            Name: DB_PASSWORD
+            Type: PLAINTEXT
+            Value: !Sub "${DBPassword}"
+
+        Image: !Sub ${CodeBuildImage}
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: false
+        Type: LINUX_CONTAINER
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref CodebuildSecurityGroup
+        Subnets:
+          - !Ref VpcSubnetPrivate1A
+          - !Ref VpcSubnetPrivate1B
+          - !Ref VpcSubnetPrivate1C
+        VpcId: !Ref Vpc
+
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+        S3Logs:
+          EncryptionDisabled: false
+          Status: DISABLED
+      Name: !Sub ${CodeBuildProject}
+      QueuedTimeoutInMinutes: 480
+      ServiceRole: !GetAtt IAMRoleCodeBuildServiceRole.Arn
+      Source:
+        BuildSpec: !Sub ${CodeBuildSpecFolder}
+        InsecureSsl: false
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 60
+      Visibility: PRIVATE
+
+  #### CODE PIPELINE DEV ####
+
+  IAMManagedPolicyCodePipelineServiceRoleDEV:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameDEV}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'iam:PassRole'
+            Resource: '*'
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                'iam:PassedToService':
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - 'codecommit:CancelUploadArchive'
+              - 'codecommit:GetBranch'
+              - 'codecommit:GetCommit'
+              - 'codecommit:GetRepository'
+              - 'codecommit:GetUploadArchiveStatus'
+              - 'codecommit:UploadArchive'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetApplication'
+              - 'codedeploy:GetApplicationRevision'
+              - 'codedeploy:GetDeployment'
+              - 'codedeploy:GetDeploymentConfig'
+              - 'codedeploy:RegisterApplicationRevision'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'elasticbeanstalk:*'
+              - 'ec2:*'
+              - 'elasticloadbalancing:*'
+              - 'autoscaling:*'
+              - 'cloudwatch:*'
+              - 's3:*'
+              - 'sns:*'
+              - 'cloudformation:*'
+              - 'rds:*'
+              - 'sqs:*'
+              - 'ecs:*'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:ListFunctions'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'opsworks:CreateDeployment'
+              - 'opsworks:DescribeApps'
+              - 'opsworks:DescribeCommands'
+              - 'opsworks:DescribeDeployments'
+              - 'opsworks:DescribeInstances'
+              - 'opsworks:DescribeStacks'
+              - 'opsworks:UpdateApp'
+              - 'opsworks:UpdateStack'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuildBatches'
+              - 'codebuild:StartBuildBatch'
+            Resource: '*'
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - 'devicefarm:ListProjects'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:GetRun'
+              - 'devicefarm:GetUpload'
+              - 'devicefarm:CreateUpload'
+              - 'devicefarm:ScheduleRun'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'servicecatalog:ListProvisioningArtifacts'
+              - 'servicecatalog:CreateProvisioningArtifact'
+              - 'servicecatalog:DescribeProvisioningArtifact'
+              - 'servicecatalog:DeleteProvisioningArtifact'
+              - 'servicecatalog:UpdateProduct'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:DescribeImages'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'states:DescribeExecution'
+              - 'states:DescribeStateMachine'
+              - 'states:StartExecution'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'appconfig:StartDeployment'
+              - 'appconfig:StopDeployment'
+              - 'appconfig:GetDeployment'
+            Resource: '*'
+
+  IAMRoleCodePipelineServiceRoleDEV:
+    DependsOn: IAMManagedPolicyCodePipelineServiceRoleDEV
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "AWSCodePipelineServiceRole-${AWSRegion}-${PipelineNameDEV}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codepipeline.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameDEV}"
+
+  S3BucketCodepipelineDEV:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameDEV}"
+
+  CodePipelineDEV:
+    DependsOn:
+      - AWSCodeBuildProject
+      - S3BucketCodepipelineDEV
+      - IAMManagedPolicyCodePipelineServiceRoleDEV
+      - IAMRoleCodePipelineServiceRoleDEV
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Ref S3BucketCodepipelineDEV
+        Type: S3
+      Name: !Sub ${PipelineNameDEV}
+      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleDEV.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                BranchName: !Sub ${GitHubBranchNameDEV}
+                ConnectionArn: !Sub ${ConnectionArn}
+                FullRepositoryId: !Sub ${GitHubRepo}
+                OutputArtifactFormat: CODE_ZIP
+              Name: Source
+              Namespace: SourceVariables
+              OutputArtifacts:
+                -
+                  Name: SourceArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Source
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub ${BuildProjectName}
+                #EnvironmentVariables: # !Sub "[{\"name\":\"xxx_xxx\",\"value\":\"${XXXX}\",\"type\":\"PLAINTEXT\"}]"
+
+              InputArtifacts:
+                -
+                  Name: SourceArtifact
+              Name: Build
+              Namespace: BuildVariables
+              OutputArtifacts:
+                -
+                  Name: BuildArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Build
+
+  #  #### CODE PIPELINE STAGING ####
+  #
+  #  IAMManagedPolicyCodePipelineServiceRoleSTG:
+  #    Type: "AWS::IAM::ManagedPolicy"
+  #    Properties:
+  #      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
+  #      Path: "/service-role/"
+  #      PolicyDocument:
+  #        Version: '2012-10-17'
+  #        Statement:
+  #          - Action:
+  #              - 'iam:PassRole'
+  #            Resource: '*'
+  #            Effect: Allow
+  #            Condition:
+  #              StringEqualsIfExists:
+  #                'iam:PassedToService':
+  #                  - cloudformation.amazonaws.com
+  #                  - elasticbeanstalk.amazonaws.com
+  #                  - ec2.amazonaws.com
+  #                  - ecs-tasks.amazonaws.com
+  #          - Action:
+  #              - 'codecommit:CancelUploadArchive'
+  #              - 'codecommit:GetBranch'
+  #              - 'codecommit:GetCommit'
+  #              - 'codecommit:GetRepository'
+  #              - 'codecommit:GetUploadArchiveStatus'
+  #              - 'codecommit:UploadArchive'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'codedeploy:CreateDeployment'
+  #              - 'codedeploy:GetApplication'
+  #              - 'codedeploy:GetApplicationRevision'
+  #              - 'codedeploy:GetDeployment'
+  #              - 'codedeploy:GetDeploymentConfig'
+  #              - 'codedeploy:RegisterApplicationRevision'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'codestar-connections:UseConnection'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'elasticbeanstalk:*'
+  #              - 'ec2:*'
+  #              - 'elasticloadbalancing:*'
+  #              - 'autoscaling:*'
+  #              - 'cloudwatch:*'
+  #              - 's3:*'
+  #              - 'sns:*'
+  #              - 'cloudformation:*'
+  #              - 'rds:*'
+  #              - 'sqs:*'
+  #              - 'ecs:*'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'lambda:InvokeFunction'
+  #              - 'lambda:ListFunctions'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'opsworks:CreateDeployment'
+  #              - 'opsworks:DescribeApps'
+  #              - 'opsworks:DescribeCommands'
+  #              - 'opsworks:DescribeDeployments'
+  #              - 'opsworks:DescribeInstances'
+  #              - 'opsworks:DescribeStacks'
+  #              - 'opsworks:UpdateApp'
+  #              - 'opsworks:UpdateStack'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'cloudformation:CreateStack'
+  #              - 'cloudformation:DeleteStack'
+  #              - 'cloudformation:DescribeStacks'
+  #              - 'cloudformation:UpdateStack'
+  #              - 'cloudformation:CreateChangeSet'
+  #              - 'cloudformation:DeleteChangeSet'
+  #              - 'cloudformation:DescribeChangeSet'
+  #              - 'cloudformation:ExecuteChangeSet'
+  #              - 'cloudformation:SetStackPolicy'
+  #              - 'cloudformation:ValidateTemplate'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Action:
+  #              - 'codebuild:BatchGetBuilds'
+  #              - 'codebuild:StartBuild'
+  #              - 'codebuild:BatchGetBuildBatches'
+  #              - 'codebuild:StartBuildBatch'
+  #            Resource: '*'
+  #            Effect: Allow
+  #          - Effect: Allow
+  #            Action:
+  #              - 'devicefarm:ListProjects'
+  #              - 'devicefarm:ListDevicePools'
+  #              - 'devicefarm:GetRun'
+  #              - 'devicefarm:GetUpload'
+  #              - 'devicefarm:CreateUpload'
+  #              - 'devicefarm:ScheduleRun'
+  #            Resource: '*'
+  #          - Effect: Allow
+  #            Action:
+  #              - 'servicecatalog:ListProvisioningArtifacts'
+  #              - 'servicecatalog:CreateProvisioningArtifact'
+  #              - 'servicecatalog:DescribeProvisioningArtifact'
+  #              - 'servicecatalog:DeleteProvisioningArtifact'
+  #              - 'servicecatalog:UpdateProduct'
+  #            Resource: '*'
+  #          - Effect: Allow
+  #            Action:
+  #              - 'cloudformation:ValidateTemplate'
+  #            Resource: '*'
+  #          - Effect: Allow
+  #            Action:
+  #              - 'ecr:DescribeImages'
+  #            Resource: '*'
+  #          - Effect: Allow
+  #            Action:
+  #              - 'states:DescribeExecution'
+  #              - 'states:DescribeStateMachine'
+  #              - 'states:StartExecution'
+  #            Resource: '*'
+  #          - Effect: Allow
+  #            Action:
+  #              - 'appconfig:StartDeployment'
+  #              - 'appconfig:StopDeployment'
+  #              - 'appconfig:GetDeployment'
+  #            Resource: '*'
+  #
+  #  IAMRoleCodePipelineServiceRoleSTG:
+  #    DependsOn: IAMManagedPolicyCodePipelineServiceRoleSTG
+  #    Type: "AWS::IAM::Role"
+  #    Properties:
+  #      Path: "/service-role/"
+  #      RoleName: !Sub "AWSCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
+  #      AssumeRolePolicyDocument:
+  #        Version: '2012-10-17'
+  #        Statement:
+  #          Effect:  Allow
+  #          Principal:
+  #            Service:
+  #              - codepipeline.amazonaws.com
+  #          Action: 'sts:AssumeRole'
+  #      MaxSessionDuration: 3600
+  #      ManagedPolicyArns:
+  #        - !Sub "arn:aws:iam::AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
+  #
+  #  S3BucketCodepipelinSTG:
+  #   Type: "AWS::S3::Bucket"
+  #   Properties:
+  #     BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameSTG}"
+  #
+  #  CodePipelineSTG:
+  #    DependsOn:
+  #      - S3BucketCodepipelinSTG
+  #      - IAMManagedPolicyCodePipelineServiceRoleSTG
+  #      - IAMRoleCodePipelineServiceRoleSTG
+  #    Type: "AWS::CodePipeline::Pipeline"
+  #    Properties:
+  #      ArtifactStore:
+  #        Location: !Ref S3BucketCodepipelinSTG
+  #        Type: S3
+  #      Name: !Sub ${PipelineNameStaging}
+  #      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleSTG.Arn
+  #      Stages:
+  #        -
+  #          Actions:
+  #            -
+  #              ActionTypeId:
+  #                Category: Source
+  #                Owner: AWS
+  #                Provider: CodeStarSourceConnection
+  #                Version: "1"
+  #              Configuration:
+  #                BranchName: !Sub ${GitHubBranchNameStaging}
+  #                ConnectionArn: !Sub ${ConnectionArn}
+  #                FullRepositoryId: !Sub ${GitHubRepo}
+  #                OutputArtifactFormat: CODE_ZIP
+  #              Name: Source
+  #              Namespace: SourceVariables
+  #              OutputArtifacts:
+  #                -
+  #                  Name: SourceArtifact
+  #              Region: !Sub ${AWSRegion}
+  #              RunOrder: 1
+  #          Name: Source
+  #        -
+  #          Actions:
+  #            -
+  #              ActionTypeId:
+  #                Category: Build
+  #                Owner: AWS
+  #                Provider: CodeBuild
+  #                Version: "1"
+  #              Configuration:
+  #                ProjectName: !Sub ${BuildProjectName}
+  #                #EnvironmentVariables: # !Sub "[{\"name\":\"STAGE_NAME\",\"value\":\"${STAGENAME}\",\"type\":\"PLAINTEXT\"}]"
+  #
+  #              InputArtifacts:
+  #                -
+  #                  Name: SourceArtifact
+  #              Name: Build
+  #              Namespace: BuildVariables
+  #              OutputArtifacts:
+  #                -
+  #                  Name: BuildArtifact
+  #              Region: !Sub ${AWSRegion}
+  #              RunOrder: 1
+  #          Name: Build
+  #
+  #  #### CODE PIPELINE V1 ####
+  #
+  #  IAMManagedPolicyCodePipelineServiceRolePROD:
+  #    Type: "AWS::IAM::ManagedPolicy"
+  #    Properties:
+  #      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameV1}"
+  #      Path: "/service-role/"
+  #      PolicyDocument:
+  #        Version: '2012-10-17'
+  #        Statement:
+  #        - Action:
+  #            - 'iam:PassRole'
+  #          Resource: '*'
+  #          Effect: Allow
+  #          Condition:
+  #            StringEqualsIfExists:
+  #              'iam:PassedToService':
+  #                - cloudformation.amazonaws.com
+  #                - elasticbeanstalk.amazonaws.com
+  #                - ec2.amazonaws.com
+  #                - ecs-tasks.amazonaws.com
+  #        - Action:
+  #            - 'codecommit:CancelUploadArchive'
+  #            - 'codecommit:GetBranch'
+  #            - 'codecommit:GetCommit'
+  #            - 'codecommit:GetRepository'
+  #            - 'codecommit:GetUploadArchiveStatus'
+  #            - 'codecommit:UploadArchive'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'codedeploy:CreateDeployment'
+  #            - 'codedeploy:GetApplication'
+  #            - 'codedeploy:GetApplicationRevision'
+  #            - 'codedeploy:GetDeployment'
+  #            - 'codedeploy:GetDeploymentConfig'
+  #            - 'codedeploy:RegisterApplicationRevision'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'codestar-connections:UseConnection'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'elasticbeanstalk:*'
+  #            - 'ec2:*'
+  #            - 'elasticloadbalancing:*'
+  #            - 'autoscaling:*'
+  #            - 'cloudwatch:*'
+  #            - 's3:*'
+  #            - 'sns:*'
+  #            - 'cloudformation:*'
+  #            - 'rds:*'
+  #            - 'sqs:*'
+  #            - 'ecs:*'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'lambda:InvokeFunction'
+  #            - 'lambda:ListFunctions'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'opsworks:CreateDeployment'
+  #            - 'opsworks:DescribeApps'
+  #            - 'opsworks:DescribeCommands'
+  #            - 'opsworks:DescribeDeployments'
+  #            - 'opsworks:DescribeInstances'
+  #            - 'opsworks:DescribeStacks'
+  #            - 'opsworks:UpdateApp'
+  #            - 'opsworks:UpdateStack'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'cloudformation:CreateStack'
+  #            - 'cloudformation:DeleteStack'
+  #            - 'cloudformation:DescribeStacks'
+  #            - 'cloudformation:UpdateStack'
+  #            - 'cloudformation:CreateChangeSet'
+  #            - 'cloudformation:DeleteChangeSet'
+  #            - 'cloudformation:DescribeChangeSet'
+  #            - 'cloudformation:ExecuteChangeSet'
+  #            - 'cloudformation:SetStackPolicy'
+  #            - 'cloudformation:ValidateTemplate'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Action:
+  #            - 'codebuild:BatchGetBuilds'
+  #            - 'codebuild:StartBuild'
+  #            - 'codebuild:BatchGetBuildBatches'
+  #            - 'codebuild:StartBuildBatch'
+  #          Resource: '*'
+  #          Effect: Allow
+  #        - Effect: Allow
+  #          Action:
+  #            - 'devicefarm:ListProjects'
+  #            - 'devicefarm:ListDevicePools'
+  #            - 'devicefarm:GetRun'
+  #            - 'devicefarm:GetUpload'
+  #            - 'devicefarm:CreateUpload'
+  #            - 'devicefarm:ScheduleRun'
+  #          Resource: '*'
+  #        - Effect: Allow
+  #          Action:
+  #            - 'servicecatalog:ListProvisioningArtifacts'
+  #            - 'servicecatalog:CreateProvisioningArtifact'
+  #            - 'servicecatalog:DescribeProvisioningArtifact'
+  #            - 'servicecatalog:DeleteProvisioningArtifact'
+  #            - 'servicecatalog:UpdateProduct'
+  #          Resource: '*'
+  #        - Effect: Allow
+  #          Action:
+  #            - 'cloudformation:ValidateTemplate'
+  #          Resource: '*'
+  #        - Effect: Allow
+  #          Action:
+  #            - 'ecr:DescribeImages'
+  #          Resource: '*'
+  #        - Effect: Allow
+  #          Action:
+  #            - 'states:DescribeExecution'
+  #            - 'states:DescribeStateMachine'
+  #            - 'states:StartExecution'
+  #          Resource: '*'
+  #        - Effect: Allow
+  #          Action:
+  #            - 'appconfig:StartDeployment'
+  #            - 'appconfig:StopDeployment'
+  #            - 'appconfig:GetDeployment'
+  #          Resource: '*'
+  #
+  #  IAMRoleCodePipelineServiceRolePROD:
+  #    DependsOn: IAMManagedPolicyCodePipelineServiceRolePROD
+  #    Type: "AWS::IAM::Role"
+  #    Properties:
+  #      Path: "/service-role/"
+  #      RoleName: !Sub "AWSCodePipelineServiceRole-${AWSRegion}-${PipelineNameV1}"
+  #      AssumeRolePolicyDocument:
+  #        Version: '2012-10-17'
+  #        Statement:
+  #          Effect:  Allow
+  #          Principal:
+  #            Service:
+  #              - codepipeline.amazonaws.com
+  #          Action: 'sts:AssumeRole'
+  #      MaxSessionDuration: 3600
+  #      ManagedPolicyArns:
+  #        - !Sub "arn:aws:iam::$AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameV1}"
+  #
+  #  S3BucketCodepipelinV1:
+  #   Type: "AWS::S3::Bucket"
+  #   Properties:
+  #     BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameV1}"
+  #
+  #  CodePipelinePROD:
+  #    DependsOn:
+  #      - AWSCodeBuildProject
+  #      - S3BucketCodepipelineV1
+  #      - IAMManagedPolicyCodePipelineServiceRolePROD
+  #      - IAMRoleCodePipelineServiceRolePROD
+  #    Type: "AWS::CodePipeline::Pipeline"
+  #    Properties:
+  #      ArtifactStore:
+  #        Location: !Ref S3BucketCodepipelineV1
+  #        Type: S3
+  #      Name: !Sub ${PipelineNameV1}
+  #      RoleArn: !GetAtt IAMRoleCodePipelineServiceRolePROD.Arn
+  #      Stages:
+  #        -
+  #          Actions:
+  #            -
+  #              ActionTypeId:
+  #                Category: Source
+  #                Owner: AWS
+  #                Provider: CodeStarSourceConnection
+  #                Version: "1"
+  #              Configuration:
+  #                BranchName: !Sub ${GitHubBranchNameV1}
+  #                ConnectionArn: !Sub ${ConnectionArn}
+  #                FullRepositoryId: !Sub ${GitHubRepo}
+  #                OutputArtifactFormat: CODE_ZIP
+  #              Name: Source
+  #              Namespace: SourceVariables
+  #              OutputArtifacts:
+  #                -
+  #                  Name: SourceArtifact
+  #              Region: !Sub ${AWSRegion}
+  #              RunOrder: 1
+  #          Name: Source
+  #        -
+  #          Actions:
+  #            -
+  #              ActionTypeId:
+  #                Category: Build
+  #                Owner: AWS
+  #                Provider: CodeBuild
+  #                Version: "1"
+  #              Configuration:
+  #                ProjectName: !Sub ${BuildProjectName}
+  #                #EnvironmentVariables: # !Sub "[{\"name\":\"xxx_xxx\",\"value\":\"${XXXX}\",\"type\":\"PLAINTEXT\"}]"
+  #
+  #              InputArtifacts:
+  #                -
+  #                  Name: SourceArtifact
+  #              Name: Build
+  #              Namespace: BuildVariables
+  #              OutputArtifacts:
+  #                -
+  #                  Name: BuildArtifact
+  #              Region: !Sub ${AWSRegion}
+  #              RunOrder: 1
+  #          Name: Build
+
+  #### S3 Bucket ####
+
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${BucketName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+            BucketKeyEnabled: false
+      VersioningConfiguration:
+        Status: "Enabled"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  #### CloudFront Distribution ####
+
+  ACMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - acm.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Sub "AWSCertificateManagerFullAccess-${ResourceName}"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'acm:*'
+                Resource: '*'
+              - Effect: Allow
+                Action: 'iam:CreateServiceLinkedRole'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/acm.amazonaws.com/AWSServiceRoleForCertificateManager*
+                Condition:
+                  StringEquals:
+                    'iam:AWSServiceName': acm.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - 'iam:DeleteServiceLinkedRole'
+                  - 'iam:GetServiceLinkedRoleDeletionStatus'
+                  - 'iam:GetRole'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/acm.amazonaws.com/AWSServiceRoleForCertificateManager*
+
+  CloudFrontOriginAccessControl:
+    DependsOn: ACMRole
+    Type: "AWS::CloudFront::OriginAccessControl"
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "OAC-${BucketName}.${CustomerDomain}"
+        OriginAccessControlOriginType: "s3"
+        SigningBehavior: "always"
+        SigningProtocol: "sigv4"
+
+
+  CloudFrontCachePolicy:
+    DependsOn: CloudFrontOriginAccessControl
+    Type: "AWS::CloudFront::CachePolicy"
+    Properties:
+      CachePolicyConfig:
+        DefaultTTL: 86400
+        MaxTTL: 31536000
+        MinTTL: 1
+        Name: !Sub "cache-policy-${BucketName}-${ResourceName}"
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: 'none'
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: 'none'
+          QueryStringsConfig:
+            QueryStringBehavior: 'none'
+
+  CloudFrontDistribution:
+    DependsOn: CloudFrontOriginAccessControl
+    Type: "AWS::CloudFront::Distribution"
+    Properties:
+      DistributionConfig:
+        #Aliases:
+        #  - !Sub "${BucketName}.${CustomerDomain}"
+        Origins:
+          -
+            ConnectionAttempts: 3
+            ConnectionTimeout: 10
+            DomainName: !Sub "${BucketName}.s3.${AWSRegion}.amazonaws.com"
+            Id: !Sub "S3-${BucketName}.${CustomerDomain}"
+            OriginPath: ""
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - "HEAD"
+            - "GET"
+          CachedMethods:
+            - "HEAD"
+            - "GET"
+          Compress: true
+          CachePolicyId: !Ref CloudFrontCachePolicy
+          SmoothStreaming: false
+          TargetOriginId: !Sub "S3-${BucketName}.${CustomerDomain}"
+          ViewerProtocolPolicy: "redirect-to-https"
+        Comment: !Sub "${BucketName}.${CustomerDomain}"
+        PriceClass: "PriceClass_All"
+        Enabled: true
+        #ViewerCertificate:
+        #  AcmCertificateArn: !Sub "${AcmCertificateArn}"
+        #  MinimumProtocolVersion: "TLSv1.2_2021"
+        #  SslSupportMethod: "sni-only"
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: "none"
+        HttpVersion: "http2"
+        DefaultRootObject: ""
+        IPV6Enabled: true
+
+  BucketPolicy:
+    DependsOn: CloudFrontDistribution
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Sub "${BucketName}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadWrite
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              - !Sub "arn:aws:s3:::${BucketName}"
+              - !Sub "arn:aws:s3:::${BucketName}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AccountID}:distribution/${CloudFrontDistribution}"
+
+Outputs:
+  Vpc:
+    Description: The ID of the VPC
+    Value: !Ref Vpc
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'Vpc' ] ]
+
+  VpcSubnetPublic1A:
+    Description: VpcSubnetPublic1A
+    Value: !Ref VpcSubnetPublic1A
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPublic1A' ] ]
+
+  VpcSubnetPublic1B:
+    Description: VpcSubnetPublic1B
+    Value: !Ref VpcSubnetPublic1B
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPublic1B' ] ]
+
+  VpcSubnetPublic1C:
+    Description: VpcSubnetPublic1C
+    Value: !Ref VpcSubnetPublic1C
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPublic1C' ] ]
+
+  VpcSubnetPrivate1A:
+    Description: VpcSubnetPrivate1A
+    Value: !Ref VpcSubnetPrivate1A
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPrivate1A' ] ]
+
+  VpcSubnetPrivate1B:
+    Description: VpcSubnetPrivate1B
+    Value: !Ref VpcSubnetPrivate1B
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPrivate1B' ] ]
+
+  VpcSubnetPrivate1C:
+    Description: VpcSubnetPrivate1C
+    Value: !Ref VpcSubnetPrivate1C
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcSubnetPrivate1C' ] ]
+
+  VpcIgw:
+    Description: VpcIgw
+    Value: !Ref VpcIgw
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcIgw' ] ]
+
+  VpcNatGw0:
+    Description: VpcNatGW0 for Firstance-Lambda for VpcSubnetPrivate1A
+    Value: !Ref VpcNatGw0
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VpcNatGw0' ] ]
