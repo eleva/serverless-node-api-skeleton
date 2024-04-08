@@ -1,4 +1,12 @@
 # Serverless API skeleton
+
+## 👩🏻‍💻 Learn more
+If you want to learn more about how to use and the assumptions behind this repo, please read this article
+https://dev.to/ddesio/superpower-rest-api-dx-with-serverless-and-devops-best-practices-with-aws-51f6
+
+Comments, share, PRs are welcomed.
+
+## 💡 What you will find in this repo
 This repo is strongly based on implementing a REST API following [AWS Serverless Multi-Tier Architectures with Amazon API Gateway and AWS Lambda](https://docs.aws.amazon.com/whitepapers/latest/serverless-multi-tier-architectures-api-gateway-lambda/welcome.html) architecture patterns.<br>
 This repo contains a serverless REST API which:
 - use AWS Lambda as compute layer of serverless tier
@@ -12,7 +20,7 @@ In this repo we adopt those DevOps practices:
 - TDD with jest based on OpenAPI Doc
 - CI/CD
 
-## Why OpenAPI
+## ❓Why OpenAPI
 <img src="https://www.openapis.org/wp-content/uploads/sites/3/2023/05/What-is-OpenAPI-Simple-API-Lifecycle-Vertical.png">
 
 We suggest you to base your development process following those steps:
@@ -24,20 +32,6 @@ We suggest you to base your development process following those steps:
 - write test to ensure OpenAPI is validated and functionality is as expected (TDD with jest)
 - write code until all our test are green
 - deploy both API and documentation using CI/CD 
-
-## Infrastructure Versioning
-We ensure a separate Cloud Stack per each stage and version (i.e dev, staging, uat, v1).
-A CloudFormation template under ```.dev/cf/api-resources.yaml``` template is useful to create all cloud resources needed:
-- one VPC, with 3 public subnet and 3 private subnet (shared between versions)
-- one NATGW (AZ-1A) (please change this to three, one per each private to be compliant with HA standards)
-- an RDS as database (you can choose to use DynamoDB as well to be full serverless)
-- needed security groups to let services be able to connect and communicate
-- a Codebuild Project, shared between our pipelines, to build and deploy your doc and solution
-- three Pipelines as CI/CD to deploy dev, staging, v1 versions of this API
-- one S3 bucket to store documentation versioned under "stage named" prefix
-- Coudfront Distribution to expose documentation
-
-You should create parameters ```DB-PASSWORD``` in ParameterStore, and load SSL certificate before launch this template.
 
 ## ⚡ [Setup serverless](https://www.serverless.com)
 To start working locally and deploy this project you'll need to install and configure serverless following those steps:
@@ -84,6 +78,10 @@ CREATE TABLE `user` (
 
 ## 🚀 Run Locally
 Start serverless offline from root directory
+
+```bash
+npm install
+```
 
 ```bash
 sls offline
@@ -230,3 +228,16 @@ You will find a preconfigured ```buildspec.yml``` which install, build, deploy a
 You can use it as build specification for AWS CodeBuild project triggered by AWS CodePipeline.<br>
 We suggest you to have a specific pipeline per stage dev/staging/v1 connected to specific branches on git (using gitflow).
 
+### Infrastructure Versioning
+We ensure a separate Cloud Stack per each stage and version (i.e dev, staging, uat, v1).
+A CloudFormation template under ```.dev/cf/api-resources.yaml``` template is useful to create all cloud resources needed:
+- one VPC, with 3 public subnet and 3 private subnet (shared between versions)
+- one NATGW (AZ-1A) (please change this to three, one per each private to be compliant with HA standards)
+- an RDS as database (you can choose to use DynamoDB as well to be full serverless)
+- needed security groups to let services be able to connect and communicate
+- a Codebuild Project, shared between our pipelines, to build and deploy your doc and solution
+- three Pipelines as CI/CD to deploy dev, staging, v1 versions of this API
+- one S3 bucket to store documentation versioned under "stage named" prefix
+- Coudfront Distribution to expose documentation
+
+You should create parameters ```DB-PASSWORD``` in ParameterStore, and load SSL certificate before launch this template.
