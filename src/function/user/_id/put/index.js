@@ -1,18 +1,8 @@
 'use strict';
-/*Import serverless mysql*/
-const mysql = require('serverless-mysql')({
-    library: require('mysql2'), //reference mysql2 for faster driver and support mysql8
-    config: { //load config
-        host     : process.env.DB_HOST, //host from env file
-        database : process.env.DB_DATABASE, //db from env file
-        user     : process.env.DB_USERNAME, //user from env file
-        password : process.env.DB_PASSWORD //pass from env file
-    }
-})
-/*Import utils from layers*/
-const utils = require('my-api-utils');
+import {utils} from "my-api-utils";
+const dbClient = await utils.getDbClient();
 
-module.exports.handler = async (event) => {
+export const handler = async (event) => {
 
     /* Get userId from path params */
     const userId = event.pathParameters?.id;
@@ -23,7 +13,7 @@ module.exports.handler = async (event) => {
 
     if(email){
         // Run query to update user
-        let results = await mysql.query('UPDATE user SET email=? WHERE id=?',[email,userId]);
+        let results = await dbClient.query('UPDATE user SET email=? WHERE id=?',[email,userId]);
         response = {'id':parseInt(userId),'email':email};
         statusCode = 200;
     } else {
@@ -32,7 +22,7 @@ module.exports.handler = async (event) => {
     }
 
     // Run mysql clean up function
-    await mysql.end();
+    await dbClient.end();
 
     // Return prepared response
     return utils.prepareResponse(response,statusCode);

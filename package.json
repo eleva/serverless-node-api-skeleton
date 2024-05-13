@@ -1,9 +1,11 @@
 {
   "name": "my-api",
+  "type": "module",
+  "main": "index.js",
   "version": "1.0.0",
   "description": "my-api",
   "scripts": {
-    "test": "DOTENV_CONFIG_PATH=.env.test jest --coverage",
+    "test": "DOTENV_CONFIG_PATH=.env.test node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --forceExit",
     "prune": "sls prune -n 3 --dryRun",
     "doc": "sls openapi generate -o ./doc/build/openapi.yaml -a 3.0.3 -f yaml && sls openapi generate -o ./doc/build/openapi.json -a 3.0.3 -f json -p ./doc/build/postman.json && redocly lint ./doc/build/openapi.yaml --generate-ignore-file && redocly build-docs ./doc/build/openapi.yaml --output=./doc/build/index.html",
     "db": "cd .dev/docker && docker stop $(docker ps -aq) && docker-compose build && docker-compose up -d",
@@ -13,6 +15,8 @@
   "author": "d.desio@eleva.it",
   "license": "ISC",
   "dependencies": {
+    "@aws-lambda-powertools/parameters": "^2.1.0",
+    "@aws-sdk/client-secrets-manager": "^3.572.0",
     "mysql2": "^3.2.4",
     "serverless-mysql": "^1.5.5"
   },
@@ -23,10 +27,10 @@
     "jest": "^29.5.0",
     "jest-openapi": "^0.14.1",
     "my-api-utils": "file:src/layer/shared/nodejs/node_modules/my-api-utils",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.5.0",
     "serverless-api-gateway-caching": "^1.10.1",
-    "serverless-jest-plugin": "^0.4.0",
     "serverless-jetpack": "^0.11.2",
-    "serverless-offline": "^12.0.4",
     "serverless-openapi-documenter": "^0.0.49",
     "serverless-prune-plugin": "^2.0.2",
     "serverless-slic-watch-plugin": "^2.1.3"

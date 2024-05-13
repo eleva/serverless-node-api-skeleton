@@ -140,14 +140,6 @@ DOTENV_CONFIG_PATH=.env.test jest --coverage
 
 You'll find your test coverage under ```coverage``` folder.<br>
 
-### Autogenerate tests from serverless file
-After defining a function, you can create test for a function simply using [serverless-jest-plugin](https://github.com/nordcloud/serverless-jest-plugin)
-
-To create a new test execute this command switching ```functionName``` parameter with ones defined in your ```serverless.yml``` file
-```bash
-sls create test -f functionName
-```
-
 ## 👣 Cloud Footprint
 It is a best practice to reduce lambda package footprint (package size) and general cloud footprint (unused resources).<br>
 To reduce your lambda footprint:
