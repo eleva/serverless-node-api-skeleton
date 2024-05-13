@@ -9,6 +9,7 @@ runtime: nodejs20.x
 environment:
   # environment variables
   APP_ENV: ${env:APP_ENV}
+  DB_SECRET: ${env:DB_SECRET}
   DB_HOST: ${env:DB_HOST}
   DB_DATABASE: ${env:DB_DATABASE}
   DB_USERNAME: ${env:DB_USERNAME}
