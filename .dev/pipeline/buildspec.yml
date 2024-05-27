@@ -7,7 +7,7 @@ phases:
       # Update packages
       - apt update -y
       # Install serverless globally
-      - npm install -g serverless
+      - npm install -g serverless@3.38.0
       # Install redocly globally
       - npm install -g @redocly/cli
       # Install dependencies
