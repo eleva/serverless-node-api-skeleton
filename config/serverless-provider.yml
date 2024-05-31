@@ -1,4 +1,13 @@
 name: aws
+iam:
+  role:
+    statements:
+      # Allow functions to get value from secret manager
+      - Effect: Allow
+        Action:
+          - 'secretsmanager:GetSecretValue'
+        Resource:
+          - '*'
 deploymentMethod: direct
 # Block public access on deployment bucket
 deploymentBucket:
