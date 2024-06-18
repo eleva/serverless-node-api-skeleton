@@ -14,6 +14,10 @@ models:
     description: "Generic error response"
     contentType: "application/json"
     schema: ${file(./doc/models/ErrorResponse.yml)}
+  - name: "NotFoundResponse"
+    description: "Not found error response"
+    contentType: "application/json"
+    schema: ${file(./doc/models/NotFoundResponse.yml)}
   #HELLO
   - name: "HelloResponse"
     description: "Hello response model"

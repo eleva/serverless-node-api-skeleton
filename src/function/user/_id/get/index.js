@@ -24,7 +24,8 @@ module.exports.handler = async (event) => {
     // Run mysql clean up function
     await mysql.end();
 
-    let response = results.length>0?results[0]:{};
+    let response = results.length>0?results[0]:{'message':'User has not been found'};
+    let status = results.length>0?200:400
     // Return prepared response
-    return utils.prepareResponse(response,200);
+    return utils.prepareResponse(response,status);
 };

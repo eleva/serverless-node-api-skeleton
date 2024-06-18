@@ -45,3 +45,8 @@ getUserById:
                 description: "Request error"
               responseModels:
                 application/json: "BadRequestResponse"
+            - statusCode: 404
+              responseBody:
+                description: "Not found error"
+              responseModels:
+                application/json: "NotFoundResponse"

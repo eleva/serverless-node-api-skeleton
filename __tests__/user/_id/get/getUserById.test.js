@@ -39,9 +39,9 @@ describe('getUserById', () => {
       //Expect response to be defined
       expect(response).toBeDefined();
       //Validate status
-      expect(response.statusCode).toEqual(200);
+      expect(response.statusCode).toEqual(400);
       //Validate response against UserResponse schema
-      expect(JSON.parse(response.body)).toSatisfySchemaInApiSpec("UserResponse");
+      expect(JSON.parse(response.body)).toSatisfySchemaInApiSpec("NotFoundResponse");
     });
   });
 

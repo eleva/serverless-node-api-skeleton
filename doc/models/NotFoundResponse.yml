@@ -4,4 +4,4 @@ required:
 properties:
   message:
     type: string
-    description: A message describing the error.
+    description: A message describing not found error.

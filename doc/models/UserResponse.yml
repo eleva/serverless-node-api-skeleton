@@ -1,5 +1,7 @@
 type: object
 description: User object.
+required:
+  - id
 properties:
   id:
     type: integer
