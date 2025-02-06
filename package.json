@@ -18,7 +18,6 @@
     "@aws-lambda-powertools/parameters": "^2.1.0",
     "@aws-sdk/client-secrets-manager": "^3.572.0",
     "mysql2": "^3.2.4",
-    "osls": "^3.46.0",
     "serverless-mysql": "^1.5.5"
   },
   "devDependencies": {
@@ -30,6 +29,7 @@
     "jest-openapi": "^0.14.1",
     "my-api-utils": "file:src/layer/shared/nodejs/node_modules/my-api-utils",
     "openapi-validator": "^0.14.1",
+    "osls": "^3.46.0",
     "serverless-api-gateway-caching": "^1.10.1",
     "serverless-jetpack": "^0.11.2",
     "serverless-offline": "^13.5.0",
