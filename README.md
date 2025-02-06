@@ -39,7 +39,7 @@ To start working locally and deploy this project you'll need to install and conf
 - Install [Serverless](https://www.serverless.com/framework/docs/getting-started)
 
 ```
-npm install -g serverless
+npm install -g osls
 ```
 
 - Install [serverless offline plugin](https://www.serverless.com/plugins/serverless-offline)
