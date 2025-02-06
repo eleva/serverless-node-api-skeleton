@@ -14,7 +14,7 @@ deploymentBucket:
   blockPublicAccess: true
 # The AWS region in which to deploy (us-east-1 is the default)
 region: ${env:AWS_REGION}
-runtime: nodejs20.x
+runtime: nodejs22.x
 environment:
   # environment variables
   APP_ENV: ${env:APP_ENV}
