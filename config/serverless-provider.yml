@@ -1,14 +1,24 @@
 name: aws
+iam:
+  role:
+    statements:
+      # Allow functions to get value from secret manager
+      - Effect: Allow
+        Action:
+          - 'secretsmanager:GetSecretValue'
+        Resource:
+          - '*'
 deploymentMethod: direct
 # Block public access on deployment bucket
 deploymentBucket:
   blockPublicAccess: true
 # The AWS region in which to deploy (us-east-1 is the default)
 region: ${env:AWS_REGION}
-runtime: nodejs18.x
+runtime: nodejs22.x
 environment:
   # environment variables
   APP_ENV: ${env:APP_ENV}
+  # DB_SECRET: ${env:DB_SECRET} #Decomment this line if you want to use secret manager
   DB_HOST: ${env:DB_HOST}
   DB_DATABASE: ${env:DB_DATABASE}
   DB_USERNAME: ${env:DB_USERNAME}

@@ -1,0 +1,8 @@
+{
+  "clearMocks": true,
+  "coverageDirectory": "coverage",
+  "globalSetup": "./.jest/globalSetup.js",
+  "globalTeardown": "./.jest/globalTeardown.js",
+  "rootDir": "./",
+  "setupFiles": ["dotenv/config"]
+}

@@ -1,17 +1,11 @@
 'use strict';
-require('aws-sdk/lib/maintenance_mode_message').suppress = true;
-require("dotenv").config({'path':'.env.test'})
+import dotenv from "dotenv"
+dotenv.config({'path':'.env.test'})
+import {utils} from "my-api-utils";
+const dbClient = await utils.getDbClient();
 
-const mysql = require('serverless-mysql')({
-    library: require('mysql2'), //reference mysql2 for faster driver and support mysql8
-    config: { //load config
-        host     : process.env.DB_HOST, //host from env file
-        database : process.env.DB_DATABASE, //db from env file
-        user     : process.env.DB_USERNAME, //user from env file
-        password : process.env.DB_PASSWORD //pass from env file
-    }
-})
-
-module.exports = async () => {
-
+const tearDown = async () => {
+    await dbClient.end();
 };
+
+export default tearDown;
