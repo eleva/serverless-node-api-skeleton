@@ -32,7 +32,7 @@
     "osls": "^3.46.0",
     "serverless-api-gateway-caching": "^1.10.4",
     "serverless-jetpack": "^0.11.2",
-    "serverless-offline": "^13.5.0",
+    "serverless-offline": "^13.9.0",
     "serverless-openapi-documenter": "^0.0.109",
     "serverless-prune-plugin": "^2.1.0",
     "serverless-slic-watch-plugin": "^3.2.2"
