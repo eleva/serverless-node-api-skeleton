@@ -1237,7 +1237,7 @@ Resources:
   #          Action: 'sts:AssumeRole'
   #      MaxSessionDuration: 3600
   #      ManagedPolicyArns:
-  #        - !Sub "arn:aws:iam::AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
+  #        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
   #
   #  S3BucketCodepipelinSTG:
   #   Type: "AWS::S3::Bucket"
@@ -1449,7 +1449,7 @@ Resources:
   #          Action: 'sts:AssumeRole'
   #      MaxSessionDuration: 3600
   #      ManagedPolicyArns:
-  #        - !Sub "arn:aws:iam::$AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameV1}"
+  #        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameV1}"
   #
   #  S3BucketCodepipelinV1:
   #   Type: "AWS::S3::Bucket"
