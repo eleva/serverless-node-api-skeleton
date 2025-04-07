@@ -1239,20 +1239,20 @@ Resources:
   #      ManagedPolicyArns:
   #        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${AWSRegion}-${PipelineNameStaging}"
   #
-  #  S3BucketCodepipelinSTG:
+  #  S3BucketCodepipelineSTG:
   #   Type: "AWS::S3::Bucket"
   #   Properties:
   #     BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameSTG}"
   #
   #  CodePipelineSTG:
   #    DependsOn:
-  #      - S3BucketCodepipelinSTG
+  #      - S3BucketCodepipelineSTG
   #      - IAMManagedPolicyCodePipelineServiceRoleSTG
   #      - IAMRoleCodePipelineServiceRoleSTG
   #    Type: "AWS::CodePipeline::Pipeline"
   #    Properties:
   #      ArtifactStore:
-  #        Location: !Ref S3BucketCodepipelinSTG
+  #        Location: !Ref S3BucketCodepipelineSTG
   #        Type: S3
   #      Name: !Sub ${PipelineNameStaging}
   #      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleSTG.Arn
