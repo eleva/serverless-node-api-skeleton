@@ -2,8 +2,8 @@
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import {handler as postHandler} from './../../../../src/function/user/post/index';
-import {handler as getHandler} from './../../../../src/function/user/_id/get/index';
+import {handler as postHandler} from '../../../../src/function/user/post/index.mjs';
+import {handler as delHandler} from '../../../../src/function/user/_id/delete/index.mjs';
 
 // Import jestOpenApi plugin
 import jestOpenAPI from 'jest-openapi';
@@ -13,32 +13,13 @@ let relativePath = (__dirname).split("/__tests__/")[0];
 let absolutePath = path.resolve(relativePath);
 jestOpenAPI.default(absolutePath+'/doc/build/openapi.json');
 
-describe('getUserById', () => {
+describe('deleteUserById', () => {
   beforeAll((done) => {
     //lambdaWrapper.init(liveFunction); // Run the deployed lambda
-
     done();
   });
 
-  it('Test get user by id if user does not exists', () => {
-
-    //Get a specific user calling get
-    return getHandler({
-      path: "/user/1000000",
-      pathParameters: {
-        id: "1000000"
-      }
-    }).then((response) => {
-      //Expect response to be defined
-      expect(response).toBeDefined();
-      //Validate status
-      expect(response.statusCode).toEqual(400);
-      //Validate response against UserResponse schema
-      expect(JSON.parse(response.body)).toSatisfySchemaInApiSpec("NotFoundResponse");
-    });
-  });
-
-  it('Test get user by id if user exists', () => {
+  it('Test delete by id', () => {
 
     //Define request
     let userRequest = {
@@ -51,11 +32,11 @@ describe('getUserById', () => {
     return postHandler({
       body:userRequest
     }).then((response) => {
-      //Get userId
+      //Get user id
       const userId = JSON.parse(response.body).id;
 
-      //Get specific user by id calling get
-      return getHandler({
+      //Delete specific user calling delete
+      return delHandler({
         path: "/user/"+userId,
         pathParameters: {
           id: userId

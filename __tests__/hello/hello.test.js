@@ -2,7 +2,7 @@
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import {handler} from './../../../src/function/user/get/index';
+import {handler} from '../../src/function/hello/index.mjs';
 
 // Import jestOpenApi plugin
 import jestOpenAPI from 'jest-openapi';
@@ -12,21 +12,20 @@ let relativePath = (__dirname).split("/__tests__/")[0];
 let absolutePath = path.resolve(relativePath);
 jestOpenAPI.default(absolutePath+'/doc/build/openapi.json');
 
-describe('getUser', () => {
+describe('hello', () => {
   beforeAll((done) => {
-  //lambdaWrapper.init(liveFunction); // Run the deployed lambda
+    //lambdaWrapper.init(liveFunction); // Run the deployed lambda
     done();
   });
 
-  it('Test get user', () => {
-    //Get user list calling get
+  it('Test hello function', () => {
     return handler({}).then((response) => {
       //Expect response to be defined
       expect(response).toBeDefined();
       //Validate status
       expect(response.statusCode).toEqual(200);
-      //Validate response against UserListResponse Schema
-      expect(JSON.parse(response.body)).toSatisfySchemaInApiSpec("UserListResponse");
+      //Validate response against HelloResponse schema
+      expect(JSON.parse(response.body)).toSatisfySchemaInApiSpec("HelloResponse");
     });
   });
 });

@@ -2,7 +2,7 @@
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import {handler} from './../../../src/function/user/post/index';
+import {handler} from '../../../src/function/user/post/index.mjs';
 
 // Import jestOpenApi plugin
 import jestOpenAPI from 'jest-openapi';

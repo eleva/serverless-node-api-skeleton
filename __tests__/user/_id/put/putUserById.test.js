@@ -2,8 +2,8 @@
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import {handler as postHandler} from './../../../../src/function/user/post/index';
-import {handler as putHandler} from './../../../../src/function/user/_id/put/index';
+import {handler as postHandler} from '../../../../src/function/user/post/index.mjs';
+import {handler as putHandler} from '../../../../src/function/user/_id/put/index.mjs';
 
 // Import jestOpenApi plugin
 import jestOpenAPI from 'jest-openapi';
