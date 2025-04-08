@@ -1,1 +1,4 @@
-enabled: true
+dashboard:
+  enabled: true
+alarms:
+  enabled: false
