@@ -1,0 +1,1369 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'CloudFormation to deploy 1 codebuild project, 4 pipelines (dev, staging, uat, v1), 1 bucket for documentation, 1 cloudfront distribution for documentation.'
+
+Parameters:
+
+  # Common parameters
+  ResourceName:
+    Description: Prefix for created AWS Resources
+    Type: String
+    Default: 'my-api'
+  AccountID:
+    Description: AWS Account ID
+    Type: String
+    Default: ""
+  AWSRegion:
+    Type: String
+    Default: 'eu-west-1'
+
+  ## VPC, Subnets, Security Groups
+  VpcId:
+    Type: String
+    Default: '' #VPC referenced by resources
+  Subnet1Id:
+    Type: String
+    Default: '' #Subnet referenced by resources
+  Subnet2Id:
+    Type: String
+    Default: '' #Subnet referenced by resources
+  Subnet3Id:
+    Type: String
+    Default: '' #Subnet referenced by resources
+  SG1Id:
+    Type: String
+    Default: '' #Security group for RDS DB access
+
+  # CodeBuild parameters
+  CodeBuildProject:
+    Type: String
+    Default: my-api-build
+  CodeBuildImage:
+    Type: String
+    Default: "aws/codebuild/standard:7.0"
+  CodeBuildSpecFolder:
+    Type: String
+    Default: ".dev/pipeline/buildspec.yml"
+  BuildProjectName:
+    Type: String
+    Default: my-api-build
+
+  # CodePipeline parameters
+  GitHubRepo:
+    Type: String
+    Default: ""
+  ConnectionArn:
+    Type: String
+    Default: ""
+
+  # Pipeline names and GitHub branch names
+  PipelineNameDEV:
+    Type: String
+    Default: "my-api-dev"
+  GitHubBranchNameDEV:
+    Type: String
+    Default: "develop" #develop
+  PipelineNameStaging:
+    Type: String
+    Default: "my-api-staging"
+  GitHubBranchNameStaging:
+    Type: String
+    Default: "release/staging" #release/staging
+  PipelineNameUAT:
+    Type: String
+    Default: "my-api-uat"
+  GitHubBranchNameUAT:
+    Type: String
+    Default: "release/uat" #release/uat
+  PipelineNameProd:
+    Type: String
+    Default: "my-api-v1"
+  GitHubBranchNameProd:
+    Type: String
+    Default: "release/v1" #release/v1
+
+  # Serverless user key for deployment
+  ServerlessUserKey:
+    Description: 'Name of Parameter Store parameter to define AWS user key to be used to deploy'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'SERVERLESS-USER-KEY'
+  ServerlessUserSecret:
+    Description: 'Name of Parameter Store parameter to define AWS user secret to be used to deploy'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'SERVERLESS-USER-SECRET'
+
+  #Environment variables
+  ## Default environment variables
+  DBHost:
+    Type: String
+    Default: ''
+  DBUsername:
+    Type: String
+    Default: 'db_master'
+  DBPassword:
+    Description: 'Name of Parameter Store parameter to define db password that must contain only Upper-case, Lower-case, Digits, Underline characters'
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: 'DB-PASSWORD'
+
+  #API documentation
+  BucketName:
+    Type: String
+    Default: "my-api-doc"
+  CustomerDomain:
+    Description: The domain name of customer
+    Type: String
+    Default: my-api
+  #AcmCertificateArn:
+  #  Description: Arn of certificate SSL (N. Virginia)
+  #  Type: String
+  #  Default: "xxxxxxxxx"
+
+Resources:
+
+  ##### CODEBUILD ####
+
+  CodebuildSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "${ResourceName}-codebuild-security-group"
+      GroupName: !Sub "${ResourceName}-codebuild-sg"
+      VpcId: !Sub "${VpcId}"
+      SecurityGroupEgress:
+        IpProtocol: "-1"
+        Description: ""
+        CidrIp: "0.0.0.0/0"
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${ResourceName}-codebuild-sg"
+
+  IAMManagedPolicyCodeBuildCloudWatchLog:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildCloudWatchLogsPolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Resource:
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:${ResourceName}-codebuild-log"
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:${ResourceName}-codebuild-log:*"
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+
+  IAMManagedPolicyCodeBuild:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Resource:
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:/aws/codebuild/${CodeBuildProject}"
+              - !Sub "arn:aws:logs:${AWSRegion}:${AccountID}:log-group:/aws/codebuild/${CodeBuildProject}:*"
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+          - Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::codepipeline-${AWSRegion}-*'
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:GetBucketAcl'
+              - 's3:GetBucketLocation'
+          - Effect: Allow
+            Action:
+              - 'codebuild:CreateReportGroup'
+              - 'codebuild:CreateReport'
+              - 'codebuild:UpdateReport'
+              - 'codebuild:BatchPutTestCases'
+              - 'codebuild:BatchPutCodeCoverages'
+            Resource:
+              - !Sub "arn:aws:codebuild:${AWSRegion}:${AccountID}:report-group/${CodeBuildProject}-*"
+
+  IAMManagedPolicyCodeBuildVpcPolicy:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "CodeBuildVpcPolicy-${CodeBuildProject}-${AWSRegion}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateNetworkInterface'
+              - 'ec2:DescribeDhcpOptions'
+              - 'ec2:DescribeNetworkInterfaces'
+              - 'ec2:DeleteNetworkInterface'
+              - 'ec2:DescribeSubnets'
+              - 'ec2:DescribeSecurityGroups'
+              - 'ec2:DescribeVpcs'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateNetworkInterfacePermission'
+            Resource: !Sub 'arn:aws:ec2:${AWSRegion}:${AccountID}:network-interface/*'
+            Condition:
+              StringEquals:
+                'ec2:Subnet':
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${Subnet1Id}"
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${Subnet2Id}"
+                  - !Sub "arn:aws:ec2:${AWSRegion}:${AccountID}:subnet/${Subnet3Id}"
+                'ec2:AuthorizedService': "codebuild.amazonaws.com"
+
+  IAMRoleCodeBuildServiceRole:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuild
+      - IAMManagedPolicyCodeBuildVpcPolicy
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "BuildServiceRole-${CodeBuildProject}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Ref IAMManagedPolicyCodeBuildCloudWatchLog
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildVpcPolicy-${CodeBuildProject}-${AWSRegion}"
+
+  IAMRoleCodeBuildVpcPolicy:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildVpcPolicy
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuildVpcPolicy
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "codebuild-${CodeBuildProject}-service-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Ref IAMManagedPolicyCodeBuildVpcPolicy
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildBasePolicy-${CodeBuildProject}-${AWSRegion}"
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/CodeBuildCloudWatchLogsPolicy-${CodeBuildProject}-${AWSRegion}"
+
+  AWSCodeBuildProject:
+    DependsOn:
+      - IAMManagedPolicyCodeBuildCloudWatchLog
+      - IAMManagedPolicyCodeBuild
+      - IAMManagedPolicyCodeBuildVpcPolicy
+      - IAMRoleCodeBuildVpcPolicy
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Artifacts:
+        EncryptionDisabled: false
+        Name: !Sub ${CodeBuildProject}
+        Packaging: NONE
+        Type: CODEPIPELINE
+      BadgeEnabled: false
+      Cache:
+        Type: NO_CACHE
+      EncryptionKey: !Sub "arn:aws:kms:${AWSRegion}:${AccountID}:alias/aws/s3"
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          # Default environment variables
+          -
+            Name: APP_ENV
+            Type: PLAINTEXT
+            Value: !Sub "prod"
+          -
+            Name: AWS_KEY
+            Type: PLAINTEXT
+            Value: !Sub "${ServerlessUserKey}"
+          -
+            Name: AWS_SECRET
+            Type: PLAINTEXT
+            Value: !Sub "${ServerlessUserSecret}"
+          -
+            Name: AWS_REGION
+            Type: PLAINTEXT
+            Value: !Sub "${AWSRegion}"
+          -
+            Name: DOC_BUCKET
+            Type: PLAINTEXT
+            Value: !Sub "${BucketName}"
+          -
+            Name: SG1
+            Type: PLAINTEXT
+            Value: !Sub "${SG1Id}"
+          -
+            Name: SUBNET1
+            Type: PLAINTEXT
+            Value: !Sub "${Subnet1Id}"
+          -
+            Name: SUBNET2
+            Type: PLAINTEXT
+            Value: !Sub "${Subnet2Id}"
+          -
+            Name: SUBNET3
+            Type: PLAINTEXT
+            Value: !Sub "${Subnet3Id}"
+          -
+            Name: DB_HOST
+            Type: PLAINTEXT
+            Value: !Sub "${DBHost}"
+          -
+            Name: DB_USERNAME
+            Type: PLAINTEXT
+            Value: !Sub "${DBUsername}"
+          -
+            Name: DB_PASSWORD
+            Type: PLAINTEXT
+            Value: !Sub "${DBPassword}"
+
+        Image: !Sub ${CodeBuildImage}
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: false
+        Type: LINUX_CONTAINER
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref CodebuildSecurityGroup
+        Subnets:
+          - !Sub "${Subnet1Id}"
+          - !Sub "${Subnet2Id}"
+          - !Sub "${Subnet3Id}"
+        VpcId: !Sub "${VpcId}"
+
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+        S3Logs:
+          EncryptionDisabled: false
+          Status: DISABLED
+      Name: !Sub ${CodeBuildProject}
+      QueuedTimeoutInMinutes: 480
+      ServiceRole: !GetAtt IAMRoleCodeBuildServiceRole.Arn
+      Source:
+        BuildSpec: !Sub ${CodeBuildSpecFolder}
+        InsecureSsl: false
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 60
+      Visibility: PRIVATE
+
+  #### CODE PIPELINE DEV ####
+
+  IAMManagedPolicyCodePipelineServiceRoleDEV:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${PipelineNameDEV}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'iam:PassRole'
+            Resource: '*'
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                'iam:PassedToService':
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - 'codecommit:CancelUploadArchive'
+              - 'codecommit:GetBranch'
+              - 'codecommit:GetCommit'
+              - 'codecommit:GetRepository'
+              - 'codecommit:GetUploadArchiveStatus'
+              - 'codecommit:UploadArchive'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetApplication'
+              - 'codedeploy:GetApplicationRevision'
+              - 'codedeploy:GetDeployment'
+              - 'codedeploy:GetDeploymentConfig'
+              - 'codedeploy:RegisterApplicationRevision'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'elasticbeanstalk:*'
+              - 'ec2:*'
+              - 'elasticloadbalancing:*'
+              - 'autoscaling:*'
+              - 'cloudwatch:*'
+              - 's3:*'
+              - 'sns:*'
+              - 'cloudformation:*'
+              - 'rds:*'
+              - 'sqs:*'
+              - 'ecs:*'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:ListFunctions'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'opsworks:CreateDeployment'
+              - 'opsworks:DescribeApps'
+              - 'opsworks:DescribeCommands'
+              - 'opsworks:DescribeDeployments'
+              - 'opsworks:DescribeInstances'
+              - 'opsworks:DescribeStacks'
+              - 'opsworks:UpdateApp'
+              - 'opsworks:UpdateStack'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuildBatches'
+              - 'codebuild:StartBuildBatch'
+            Resource: '*'
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - 'devicefarm:ListProjects'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:GetRun'
+              - 'devicefarm:GetUpload'
+              - 'devicefarm:CreateUpload'
+              - 'devicefarm:ScheduleRun'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'servicecatalog:ListProvisioningArtifacts'
+              - 'servicecatalog:CreateProvisioningArtifact'
+              - 'servicecatalog:DescribeProvisioningArtifact'
+              - 'servicecatalog:DeleteProvisioningArtifact'
+              - 'servicecatalog:UpdateProduct'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:DescribeImages'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'states:DescribeExecution'
+              - 'states:DescribeStateMachine'
+              - 'states:StartExecution'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'appconfig:StartDeployment'
+              - 'appconfig:StopDeployment'
+              - 'appconfig:GetDeployment'
+            Resource: '*'
+
+  IAMRoleCodePipelineServiceRoleDEV:
+    DependsOn: IAMManagedPolicyCodePipelineServiceRoleDEV
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "PipelineServiceRole-${PipelineNameDEV}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codepipeline.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${PipelineNameDEV}"
+
+  S3BucketCodepipelineDEV:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameDEV}"
+
+  CodePipelineDEV:
+    DependsOn:
+      - AWSCodeBuildProject
+      - S3BucketCodepipelineDEV
+      - IAMManagedPolicyCodePipelineServiceRoleDEV
+      - IAMRoleCodePipelineServiceRoleDEV
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Ref S3BucketCodepipelineDEV
+        Type: S3
+      Name: !Sub ${PipelineNameDEV}
+      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleDEV.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                BranchName: !Sub ${GitHubBranchNameDEV}
+                ConnectionArn: !Sub ${ConnectionArn}
+                FullRepositoryId: !Sub ${GitHubRepo}
+                OutputArtifactFormat: CODE_ZIP
+              Name: Source
+              Namespace: SourceVariables
+              OutputArtifacts:
+                -
+                  Name: SourceArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Source
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub ${BuildProjectName}
+                EnvironmentVariables: "[{\"name\":\"STAGE_NAME\",\"value\":\"dev\",\"type\":\"PLAINTEXT\"}]"
+
+              InputArtifacts:
+                -
+                  Name: SourceArtifact
+              Name: Build
+              Namespace: BuildVariables
+              OutputArtifacts:
+                -
+                  Name: BuildArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Build
+
+  #### CODE PIPELINE STAGING ####
+
+  IAMManagedPolicyCodePipelineServiceRoleStaging:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${PipelineNameStaging}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'iam:PassRole'
+            Resource: '*'
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                'iam:PassedToService':
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - 'codecommit:CancelUploadArchive'
+              - 'codecommit:GetBranch'
+              - 'codecommit:GetCommit'
+              - 'codecommit:GetRepository'
+              - 'codecommit:GetUploadArchiveStatus'
+              - 'codecommit:UploadArchive'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetApplication'
+              - 'codedeploy:GetApplicationRevision'
+              - 'codedeploy:GetDeployment'
+              - 'codedeploy:GetDeploymentConfig'
+              - 'codedeploy:RegisterApplicationRevision'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'elasticbeanstalk:*'
+              - 'ec2:*'
+              - 'elasticloadbalancing:*'
+              - 'autoscaling:*'
+              - 'cloudwatch:*'
+              - 's3:*'
+              - 'sns:*'
+              - 'cloudformation:*'
+              - 'rds:*'
+              - 'sqs:*'
+              - 'ecs:*'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:ListFunctions'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'opsworks:CreateDeployment'
+              - 'opsworks:DescribeApps'
+              - 'opsworks:DescribeCommands'
+              - 'opsworks:DescribeDeployments'
+              - 'opsworks:DescribeInstances'
+              - 'opsworks:DescribeStacks'
+              - 'opsworks:UpdateApp'
+              - 'opsworks:UpdateStack'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuildBatches'
+              - 'codebuild:StartBuildBatch'
+            Resource: '*'
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - 'devicefarm:ListProjects'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:GetRun'
+              - 'devicefarm:GetUpload'
+              - 'devicefarm:CreateUpload'
+              - 'devicefarm:ScheduleRun'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'servicecatalog:ListProvisioningArtifacts'
+              - 'servicecatalog:CreateProvisioningArtifact'
+              - 'servicecatalog:DescribeProvisioningArtifact'
+              - 'servicecatalog:DeleteProvisioningArtifact'
+              - 'servicecatalog:UpdateProduct'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:DescribeImages'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'states:DescribeExecution'
+              - 'states:DescribeStateMachine'
+              - 'states:StartExecution'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'appconfig:StartDeployment'
+              - 'appconfig:StopDeployment'
+              - 'appconfig:GetDeployment'
+            Resource: '*'
+
+  IAMRoleCodePipelineServiceRoleStaging:
+    DependsOn: IAMManagedPolicyCodePipelineServiceRoleStaging
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "PipelineServiceRole-${PipelineNameStaging}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codepipeline.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${PipelineNameStaging}"
+
+  S3BucketCodepipelineStaging:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameStaging}"
+
+  CodePipelineStaging:
+    DependsOn:
+      - S3BucketCodepipelineStaging
+      - IAMManagedPolicyCodePipelineServiceRoleStaging
+      - IAMRoleCodePipelineServiceRoleStaging
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Ref S3BucketCodepipelineStaging
+        Type: S3
+      Name: !Sub ${PipelineNameStaging}
+      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleStaging.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                BranchName: !Sub ${GitHubBranchNameStaging}
+                ConnectionArn: !Sub ${ConnectionArn}
+                FullRepositoryId: !Sub ${GitHubRepo}
+                OutputArtifactFormat: CODE_ZIP
+              Name: Source
+              Namespace: SourceVariables
+              OutputArtifacts:
+                -
+                  Name: SourceArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Source
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub ${BuildProjectName}
+                EnvironmentVariables: "[{\"name\":\"STAGE_NAME\",\"value\":\"staging\",\"type\":\"PLAINTEXT\"}]"
+
+              InputArtifacts:
+                -
+                  Name: SourceArtifact
+              Name: Build
+              Namespace: BuildVariables
+              OutputArtifacts:
+                -
+                  Name: BuildArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Build
+
+  #### CODE PIPELINE UAT ####
+
+  IAMManagedPolicyCodePipelineServiceRoleUAT:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${PipelineNameUAT}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'iam:PassRole'
+            Resource: '*'
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                'iam:PassedToService':
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - 'codecommit:CancelUploadArchive'
+              - 'codecommit:GetBranch'
+              - 'codecommit:GetCommit'
+              - 'codecommit:GetRepository'
+              - 'codecommit:GetUploadArchiveStatus'
+              - 'codecommit:UploadArchive'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetApplication'
+              - 'codedeploy:GetApplicationRevision'
+              - 'codedeploy:GetDeployment'
+              - 'codedeploy:GetDeploymentConfig'
+              - 'codedeploy:RegisterApplicationRevision'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'elasticbeanstalk:*'
+              - 'ec2:*'
+              - 'elasticloadbalancing:*'
+              - 'autoscaling:*'
+              - 'cloudwatch:*'
+              - 's3:*'
+              - 'sns:*'
+              - 'cloudformation:*'
+              - 'rds:*'
+              - 'sqs:*'
+              - 'ecs:*'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:ListFunctions'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'opsworks:CreateDeployment'
+              - 'opsworks:DescribeApps'
+              - 'opsworks:DescribeCommands'
+              - 'opsworks:DescribeDeployments'
+              - 'opsworks:DescribeInstances'
+              - 'opsworks:DescribeStacks'
+              - 'opsworks:UpdateApp'
+              - 'opsworks:UpdateStack'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuildBatches'
+              - 'codebuild:StartBuildBatch'
+            Resource: '*'
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - 'devicefarm:ListProjects'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:GetRun'
+              - 'devicefarm:GetUpload'
+              - 'devicefarm:CreateUpload'
+              - 'devicefarm:ScheduleRun'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'servicecatalog:ListProvisioningArtifacts'
+              - 'servicecatalog:CreateProvisioningArtifact'
+              - 'servicecatalog:DescribeProvisioningArtifact'
+              - 'servicecatalog:DeleteProvisioningArtifact'
+              - 'servicecatalog:UpdateProduct'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:DescribeImages'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'states:DescribeExecution'
+              - 'states:DescribeStateMachine'
+              - 'states:StartExecution'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'appconfig:StartDeployment'
+              - 'appconfig:StopDeployment'
+              - 'appconfig:GetDeployment'
+            Resource: '*'
+
+  IAMRoleCodePipelineServiceRoleUAT:
+    DependsOn: IAMManagedPolicyCodePipelineServiceRoleUAT
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "PipelineServiceRole-${PipelineNameUAT}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codepipeline.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${PipelineNameUAT}"
+
+  S3BucketCodepipelineUAT:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameUAT}"
+
+  CodePipelineUAT:
+    DependsOn:
+      - AWSCodeBuildProject
+      - S3BucketCodepipelineUAT
+      - IAMManagedPolicyCodePipelineServiceRoleUAT
+      - IAMRoleCodePipelineServiceRoleUAT
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Ref S3BucketCodepipelineUAT
+        Type: S3
+      Name: !Sub ${PipelineNameUAT}
+      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleUAT.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                BranchName: !Sub ${GitHubBranchNameUAT}
+                ConnectionArn: !Sub ${ConnectionArn}
+                FullRepositoryId: !Sub ${GitHubRepo}
+                OutputArtifactFormat: CODE_ZIP
+              Name: Source
+              Namespace: SourceVariables
+              OutputArtifacts:
+                -
+                  Name: SourceArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Source
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub ${BuildProjectName}
+                EnvironmentVariables: "[{\"name\":\"STAGE_NAME\",\"value\":\"uat\",\"type\":\"PLAINTEXT\"}]"
+
+              InputArtifacts:
+                -
+                  Name: SourceArtifact
+              Name: Build
+              Namespace: BuildVariables
+              OutputArtifacts:
+                -
+                  Name: BuildArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Build
+
+  #### CODE PIPELINE Prod ####
+
+  IAMManagedPolicyCodePipelineServiceRoleProd:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      ManagedPolicyName: !Sub "IAMRoleCodePipelineServiceRole-${PipelineNameProd}"
+      Path: "/service-role/"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'iam:PassRole'
+            Resource: '*'
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                'iam:PassedToService':
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - 'codecommit:CancelUploadArchive'
+              - 'codecommit:GetBranch'
+              - 'codecommit:GetCommit'
+              - 'codecommit:GetRepository'
+              - 'codecommit:GetUploadArchiveStatus'
+              - 'codecommit:UploadArchive'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetApplication'
+              - 'codedeploy:GetApplicationRevision'
+              - 'codedeploy:GetDeployment'
+              - 'codedeploy:GetDeploymentConfig'
+              - 'codedeploy:RegisterApplicationRevision'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'elasticbeanstalk:*'
+              - 'ec2:*'
+              - 'elasticloadbalancing:*'
+              - 'autoscaling:*'
+              - 'cloudwatch:*'
+              - 's3:*'
+              - 'sns:*'
+              - 'cloudformation:*'
+              - 'rds:*'
+              - 'sqs:*'
+              - 'ecs:*'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'lambda:InvokeFunction'
+              - 'lambda:ListFunctions'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'opsworks:CreateDeployment'
+              - 'opsworks:DescribeApps'
+              - 'opsworks:DescribeCommands'
+              - 'opsworks:DescribeDeployments'
+              - 'opsworks:DescribeInstances'
+              - 'opsworks:DescribeStacks'
+              - 'opsworks:UpdateApp'
+              - 'opsworks:UpdateStack'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuildBatches'
+              - 'codebuild:StartBuildBatch'
+            Resource: '*'
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - 'devicefarm:ListProjects'
+              - 'devicefarm:ListDevicePools'
+              - 'devicefarm:GetRun'
+              - 'devicefarm:GetUpload'
+              - 'devicefarm:CreateUpload'
+              - 'devicefarm:ScheduleRun'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'servicecatalog:ListProvisioningArtifacts'
+              - 'servicecatalog:CreateProvisioningArtifact'
+              - 'servicecatalog:DescribeProvisioningArtifact'
+              - 'servicecatalog:DeleteProvisioningArtifact'
+              - 'servicecatalog:UpdateProduct'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudformation:ValidateTemplate'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'ecr:DescribeImages'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'states:DescribeExecution'
+              - 'states:DescribeStateMachine'
+              - 'states:StartExecution'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'appconfig:StartDeployment'
+              - 'appconfig:StopDeployment'
+              - 'appconfig:GetDeployment'
+            Resource: '*'
+
+  IAMRoleCodePipelineServiceRoleProd:
+    DependsOn: IAMManagedPolicyCodePipelineServiceRoleProd
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/service-role/"
+      RoleName: !Sub "PipelineServiceRole-${PipelineNameProd}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect:  Allow
+          Principal:
+            Service:
+              - codepipeline.amazonaws.com
+          Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AccountID}:policy/service-role/IAMRoleCodePipelineServiceRole-${PipelineNameProd}"
+
+  S3BucketCodepipelineProd:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "codepipeline-${AWSRegion}-${PipelineNameProd}"
+
+  CodePipelineProd:
+    DependsOn:
+      - AWSCodeBuildProject
+      - S3BucketCodepipelineProd
+      - IAMManagedPolicyCodePipelineServiceRoleProd
+      - IAMRoleCodePipelineServiceRoleProd
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Ref S3BucketCodepipelineProd
+        Type: S3
+      Name: !Sub ${PipelineNameProd}
+      RoleArn: !GetAtt IAMRoleCodePipelineServiceRoleProd.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                BranchName: !Sub ${GitHubBranchNameProd}
+                ConnectionArn: !Sub ${ConnectionArn}
+                FullRepositoryId: !Sub ${GitHubRepo}
+                OutputArtifactFormat: CODE_ZIP
+              Name: Source
+              Namespace: SourceVariables
+              OutputArtifacts:
+                -
+                  Name: SourceArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Source
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub ${BuildProjectName}
+                EnvironmentVariables: "[{\"name\":\"STAGE_NAME\",\"value\":\"v1\",\"type\":\"PLAINTEXT\"}]"
+
+              InputArtifacts:
+                -
+                  Name: SourceArtifact
+              Name: Build
+              Namespace: BuildVariables
+              OutputArtifacts:
+                -
+                  Name: BuildArtifact
+              Region: !Sub ${AWSRegion}
+              RunOrder: 1
+          Name: Build
+
+  #### S3 Bucket ####
+
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${BucketName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+            BucketKeyEnabled: false
+      VersioningConfiguration:
+        Status: "Enabled"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  #### CloudFront Distribution ####
+
+  ACMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - acm.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Sub "AWSCertificateManagerFullAccess-${ResourceName}"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'acm:*'
+                Resource: '*'
+              - Effect: Allow
+                Action: 'iam:CreateServiceLinkedRole'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/acm.amazonaws.com/AWSServiceRoleForCertificateManager*
+                Condition:
+                  StringEquals:
+                    'iam:AWSServiceName': acm.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - 'iam:DeleteServiceLinkedRole'
+                  - 'iam:GetServiceLinkedRoleDeletionStatus'
+                  - 'iam:GetRole'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/acm.amazonaws.com/AWSServiceRoleForCertificateManager*
+
+  CloudFrontOriginAccessControl:
+    DependsOn: ACMRole
+    Type: "AWS::CloudFront::OriginAccessControl"
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "OAC-${BucketName}.${CustomerDomain}"
+        OriginAccessControlOriginType: "s3"
+        SigningBehavior: "always"
+        SigningProtocol: "sigv4"
+
+
+  CloudFrontCachePolicy:
+    DependsOn: CloudFrontOriginAccessControl
+    Type: "AWS::CloudFront::CachePolicy"
+    Properties:
+      CachePolicyConfig:
+        DefaultTTL: 86400
+        MaxTTL: 31536000
+        MinTTL: 1
+        Name: !Sub "cache-policy-${BucketName}-${ResourceName}"
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: 'none'
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: 'none'
+          QueryStringsConfig:
+            QueryStringBehavior: 'none'
+
+  CloudFrontDistribution:
+    DependsOn: CloudFrontOriginAccessControl
+    Type: "AWS::CloudFront::Distribution"
+    Properties:
+      DistributionConfig:
+        #Aliases:
+        #  - !Sub "${BucketName}.${CustomerDomain}"
+        Origins:
+          -
+            ConnectionAttempts: 3
+            ConnectionTimeout: 10
+            DomainName: !Sub "${BucketName}.s3.${AWSRegion}.amazonaws.com"
+            Id: !Sub "S3-${BucketName}.${CustomerDomain}"
+            OriginPath: ""
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - "HEAD"
+            - "GET"
+          CachedMethods:
+            - "HEAD"
+            - "GET"
+          Compress: true
+          CachePolicyId: !Ref CloudFrontCachePolicy
+          SmoothStreaming: false
+          TargetOriginId: !Sub "S3-${BucketName}.${CustomerDomain}"
+          ViewerProtocolPolicy: "redirect-to-https"
+        Comment: !Sub "${BucketName}.${CustomerDomain}"
+        PriceClass: "PriceClass_All"
+        Enabled: true
+        #ViewerCertificate:
+        #  AcmCertificateArn: !Sub "${AcmCertificateArn}"
+        #  MinimumProtocolVersion: "TLSv1.2_2021"
+        #  SslSupportMethod: "sni-only"
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: "none"
+        HttpVersion: "http2"
+        DefaultRootObject: ""
+        IPV6Enabled: true
+
+  BucketPolicy:
+    DependsOn: CloudFrontDistribution
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Sub "${BucketName}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadWrite
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              - !Sub "arn:aws:s3:::${BucketName}"
+              - !Sub "arn:aws:s3:::${BucketName}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AccountID}:distribution/${CloudFrontDistribution}"

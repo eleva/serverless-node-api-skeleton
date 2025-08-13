@@ -1,4 +1,5 @@
 local: false
 dev: false
+staging: false
 uat: false
 v1: true
