@@ -1,17 +1,33 @@
 # Idea IDE
 .idea
+
 # Node
 node_modules
+
+# Exceptions for shared layer
+!/src/
+!/src/layer/
+!/src/layer/shared/
+!/src/layer/shared/nodejs/
+!/src/layer/shared/nodejs/node_modules/
+!/src/layer/shared/nodejs/node_modules/**
+
 # Serverless directories
 .serverless
+
 # Dotenv
 .env
 .env.*
 !.env.dist
 !.env.dist.*
+
 # Doc
 /doc/build
 !/doc/build/.gitkeep
 .redocly.lint-ignore.yaml
+
 # Tests
 coverage
+
+# Yarn
+.yarn
