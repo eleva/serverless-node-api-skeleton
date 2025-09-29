@@ -6,30 +6,35 @@ phases:
     commands:
       # Update packages
       - apt update -y
-      # Install serverless globally
-      - npm install -g osls
-      # Install redocly globally
-      - npm install -g @redocly/cli
+      # Install yarn
+      - npm install -g corepack
+      - corepack enable
       # Install dependencies
-      - npm install && npm run layer-dependencies-install && npm run layer-shared-install
+      - yarn install
+      # Install osls come dipendenza locale
+      - yarn add osls
+      # Install redocly come dipendenza locale
+      - yarn add @redocly/cli
+      # Install project dependencies
+      - yarn layer-dependencies-install && yarn layer-shared-install
       # Configure serverless cli user
-      - sls config credentials --provider aws --key $AWS_KEY --secret $AWS_SECRET
+      - npx osls config credentials --provider aws --key $AWS_KEY --secret $AWS_SECRET
   build:
     commands:
       # Generate documentation
-      - sls openapi generate -o ./doc/openapi.yaml -a 3.0.3 -f yaml
-      - sls openapi generate -o ./doc/openapi.json -a 3.0.3 -f json -p ./doc/postman.json
-      - redocly lint ./doc/openapi.yaml --generate-ignore-file
-      - redocly build-docs ./doc/openapi.yaml --output=./doc/index.html
+      - npx osls openapi generate -o ./doc/openapi.yaml -a 3.0.3 -f yaml
+      - npx osls openapi generate -o ./doc/openapi.json -a 3.0.3 -f json -p ./doc/postman.json
+      - npx redocly lint ./doc/openapi.yaml --generate-ignore-file
+      - npx redocly build-docs ./doc/openapi.yaml --output=./doc/index.html
       # Move generated documentation to s3
       - AWS_ACCESS_KEY_ID=$AWS_KEY AWS_SECRET_ACCESS_KEY=$AWS_SECRET aws s3 cp ./doc/index.html s3://$DOC_BUCKET/$STAGE_NAME/index.html
       - AWS_ACCESS_KEY_ID=$AWS_KEY AWS_SECRET_ACCESS_KEY=$AWS_SECRET aws s3 cp ./doc/postman.json s3://$DOC_BUCKET/$STAGE_NAME/postman.json
       - AWS_ACCESS_KEY_ID=$AWS_KEY AWS_SECRET_ACCESS_KEY=$AWS_SECRET aws s3 cp ./doc/openapi.json s3://$DOC_BUCKET/$STAGE_NAME/openapi.json
       - AWS_ACCESS_KEY_ID=$AWS_KEY AWS_SECRET_ACCESS_KEY=$AWS_SECRET aws s3 cp ./doc/openapi.yaml s3://$DOC_BUCKET/$STAGE_NAME/openapi.yaml
       # Execute test with jest
-      # npm run test
+      # yarn test
       # Deploy API with serverless
-      - sls deploy --stage $STAGE_NAME #deploy serverless specific stage
+      - npx osls deploy --stage $STAGE_NAME #deploy serverless specific stage
 
 artifacts:
   files:
