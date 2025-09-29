@@ -1,11 +1,13 @@
 'use strict';
 import {utils} from "my-api-utils";
 const dbClient = await utils.getDbClient();
+import {User} from "queries";
 
 export const handler = async (event) => {
 
     // Run query to get all users
-    let results = await dbClient.query('SELECT * FROM user')
+    const query = User.get();
+    let results = await dbClient.query(query.sql)
 
     // Run mysql clean up function
     await dbClient.end();

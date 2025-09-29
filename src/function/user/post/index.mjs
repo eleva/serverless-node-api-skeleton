@@ -1,5 +1,7 @@
 'use strict';
 import {utils} from "my-api-utils";
+import {User} from "queries";
+
 const dbClient = await utils.getDbClient();
 
 export const handler = async (event) => {
@@ -10,15 +12,15 @@ export const handler = async (event) => {
     let response;
     let statusCode;
 
-    if(email){
+    if (email) {
         // Run query to insert user
-        const query = 'INSERT INTO user(email) VALUES (?)';
-        let results = await dbClient.query(query,email);
+        const query = User.add(email);
+        let results = await dbClient.query(query.sql, query.values);
         let insertId = results.insertId;
-        response = {'id':insertId,'email':email};
+        response = {'id': insertId, 'email': email};
         statusCode = 200;
     } else {
-        response = {'message':'Missing email in request body'}
+        response = {'message': 'Missing email in request body'}
         statusCode = 400;
     }
 
@@ -26,6 +28,6 @@ export const handler = async (event) => {
     await dbClient.end();
 
     // Return prepared response
-    return utils.prepareResponse(response,statusCode);
+    return utils.prepareResponse(response, statusCode);
 
 };
