@@ -24,24 +24,12 @@ provider: ${file(./config/serverless-provider.yml)}
   ## WAF
   #- ${file(./../../config/resources/serverless-waf.yml)}
 
-## Define atomic functions
-functions:
-  ## Hello function
-  - ${file(./src/function/hello/serverless.yml)}
-  ## Users functions
-  ### Get users
-  - ${file(./src/function/user/get/serverless.yml)}
-  ### Post user
-  - ${file(./src/function/user/post/serverless.yml)}
-  ### Get user by id
-  - ${file(./src/function/user/_id/get/serverless.yml)}
-  ### Put user by id
-  - ${file(./src/function/user/_id/put/serverless.yml)}
-  ### Delete user by id
-  - ${file(./src/function/user/_id/delete/serverless.yml)}
-
 ## Define custom
 custom: ${file(./config/serverless-custom.yml)}
+
+## Define atomic functions
+functions:
+
 
 
 
