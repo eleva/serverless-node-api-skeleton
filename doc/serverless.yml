@@ -18,24 +18,6 @@ models:
     description: "Not found error response"
     contentType: "application/json"
     schema: ${file(./doc/models/NotFoundResponse.yml)}
-  #HELLO
-  - name: "HelloResponse"
-    description: "Hello response model"
-    contentType: "application/json"
-    schema: ${file(./doc/models/HelloResponse.yml)}
-  #USER
-  - name: "UserRequest"
-    description: "User request model"
-    contentType: "application/json"
-    schema: ${file(./doc/models/UserRequest.yml)}
-  - name: "UserListResponse"
-    description: "User list response model"
-    contentType: "application/json"
-    schema: ${file(./doc/models/UserListResponse.yml)}
-  - name: "UserResponse"
-    description: "User response model"
-    contentType: "application/json"
-    schema: ${file(./doc/models/UserResponse.yml)}
 
 
 
