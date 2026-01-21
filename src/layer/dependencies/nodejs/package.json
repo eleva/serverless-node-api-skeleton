@@ -2,7 +2,9 @@
   "dependencies": {
     "@aws-lambda-powertools/parameters": "^2.1.0",
     "@aws-sdk/client-secrets-manager": "^3.572.0",
+    "@prisma/adapter-mariadb": "^7.2.0",
+    "@prisma/client": "^7.2.0",
     "mysql2": "^3.2.4",
-    "serverless-mysql": "^1.5.5"
+    "prisma": "^7.2.0"
   }
 }

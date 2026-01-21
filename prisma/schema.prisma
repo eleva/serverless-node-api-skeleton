@@ -1,5 +1,3 @@
-// Example Prisma schema for testing the CLI
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,37 +6,658 @@ datasource db {
   provider = "mysql"
 }
 
-model Role {
-  id   Int    @id @default(autoincrement())
-  name String @unique
-  User User[]
+model account {
+  id                     Int                      @id @default(autoincrement())
+  email                  String                   @db.VarChar(180)
+  roles                  Json
+  name                   String                   @db.VarChar(50)
+  surname                String                   @db.VarChar(50)
+  first_login_at         DateTime?                @db.Date
+  default_language       String?                  @db.VarChar(2)
+  password               String                   @db.VarChar(255)
+  confirm_token          String?                  @db.VarChar(6)
+  confirm_status         Boolean
+  create_time            DateTime                 @db.DateTime(0)
+  edit_time              DateTime                 @db.DateTime(0)
+  create_user            Int                      @default(0)
+  edit_user              Int                      @default(0)
+  del                    Int                      @default(0)
+  notification           notification[]
+  reset_password_request reset_password_request[]
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-  posts     Post[]
-  roleId    Int
-  role      Role     @relation(fields: [roleId], references: [id])
+model app_user {
+  id               Int                @id @default(autoincrement())
+  job_position_id  Int?
+  name             String             @db.VarChar(255)
+  surname          String             @db.VarChar(255)
+  email            String             @db.VarChar(255)
+  create_time      DateTime           @db.DateTime(0)
+  edit_time        DateTime           @db.DateTime(0)
+  create_user      Int                @default(0)
+  edit_user        Int                @default(0)
+  del              Int                @default(0)
+  identity_id      String?            @db.VarChar(255)
+  job_position     job_position?      @relation(fields: [job_position_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_88BDF3E9BEE8350F")
+  app_user_company app_user_company[]
+
+  @@index([job_position_id], map: "IDX_88BDF3E9BEE8350F")
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-  authorId  Int
-  author    User     @relation(fields: [authorId], references: [id])
-  tags      Tag[]
+model app_user_company {
+  app_user_id Int
+  company_id  Int
+  app_user    app_user @relation(fields: [app_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_D53C0DC44A3353D8")
+  company     company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_D53C0DC4979B1AD6")
+
+  @@id([app_user_id, company_id])
+  @@index([app_user_id], map: "IDX_D53C0DC44A3353D8")
+  @@index([company_id], map: "IDX_D53C0DC4979B1AD6")
 }
 
-model Tag {
-  id    Int    @id @default(autoincrement())
-  name  String @unique
-  posts Post[]
+model attachment {
+  id              Int             @id @default(autoincrement())
+  type_id         Int
+  company_id      Int?
+  lands_id        Int?
+  path            String?         @db.VarChar(255)
+  create_time     DateTime        @db.DateTime(0)
+  edit_time       DateTime        @db.DateTime(0)
+  create_user     Int             @default(0)
+  edit_user       Int             @default(0)
+  del             Int             @default(0)
+  land            land?           @relation(fields: [lands_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_795FD9BB7161813B")
+  company         company?        @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_795FD9BB979B1AD6")
+  attachment_type attachment_type @relation(fields: [type_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_795FD9BBC54C8C93")
+
+  @@index([lands_id], map: "IDX_795FD9BB7161813B")
+  @@index([company_id], map: "IDX_795FD9BB979B1AD6")
+  @@index([type_id], map: "IDX_795FD9BBC54C8C93")
+}
+
+model attachment_type {
+  id             Int          @id @default(autoincrement())
+  label          String       @db.VarChar(255)
+  is_for_land    Boolean      @default(false)
+  is_for_company Boolean      @default(false)
+  create_time    DateTime     @db.DateTime(0)
+  edit_time      DateTime     @db.DateTime(0)
+  create_user    Int          @default(0)
+  edit_user      Int          @default(0)
+  del            Int          @default(0)
+  attachment     attachment[]
+}
+
+model biodiversity_report {
+  id                       Int                        @id @default(autoincrement())
+  company_id               Int
+  path                     String                     @db.VarChar(255)
+  create_time              DateTime                   @db.DateTime(0)
+  edit_time                DateTime                   @db.DateTime(0)
+  create_user              Int                        @default(0)
+  edit_user                Int                        @default(0)
+  del                      Int                        @default(0)
+  company                  company                    @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_8BB1B0CE979B1AD6")
+  biodiversity_report_land biodiversity_report_land[]
+
+  @@index([company_id], map: "IDX_8BB1B0CE979B1AD6")
+}
+
+model biodiversity_report_land {
+  biodiversity_report_id Int
+  land_id                Int
+  land                   land                @relation(fields: [land_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_A29968441994904A")
+  biodiversity_report    biodiversity_report @relation(fields: [biodiversity_report_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_A2996844A5D35353")
+
+  @@id([biodiversity_report_id, land_id])
+  @@index([land_id], map: "IDX_A29968441994904A")
+  @@index([biodiversity_report_id], map: "IDX_A2996844A5D35353")
+}
+
+model cloudfront {
+  id                  Int    @id @default(autoincrement())
+  key_pair_id         String @db.VarChar(255)
+  private_key_string  String @db.LongText
+  distribution_upload String @db.VarChar(255)
+  expiration_time     Int
+}
+
+model company {
+  id                         Int                   @id @default(autoincrement())
+  business_name              String                @db.VarChar(255)
+  code                       String                @db.Char(2)
+  vat_number                 String                @db.VarChar(45)
+  create_time                DateTime              @db.DateTime(0)
+  edit_time                  DateTime              @db.DateTime(0)
+  create_user                Int                   @default(0)
+  edit_user                  Int                   @default(0)
+  del                        Int                   @default(0)
+  aws_customer_awsaccount_id String?               @db.VarChar(255)
+  aws_customer_identifier    String?               @db.VarChar(255)
+  aws_product_code           String?               @db.VarChar(255)
+  limit_land                 Int?
+  aws_marketplace_enabled    Boolean?
+  entitlement_response       Json?
+  identifier                 String                @db.Char(10)
+  address                    String?               @db.VarChar(255)
+  image                      String?               @db.VarChar(255)
+  production_sector          String?               @db.VarChar(255)
+  report_prompt              String?               @db.LongText
+  app_user_company           app_user_company[]
+  attachment                 attachment[]
+  biodiversity_report        biodiversity_report[]
+  company_consortium         company_consortium[]
+  land                       land[]
+}
+
+model company_consortium {
+  company_id    Int
+  consortium_id Int
+  company       company    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_474F51CB979B1AD6")
+  consortium    consortium @relation(fields: [consortium_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_474F51CBC25AAEBF")
+
+  @@id([company_id, consortium_id])
+  @@index([company_id], map: "IDX_474F51CB979B1AD6")
+  @@index([consortium_id], map: "IDX_474F51CBC25AAEBF")
+}
+
+model consortium {
+  id                 Int                  @id @default(autoincrement())
+  name               String               @unique(map: "UNIQ_FAC1B85D5E237E06") @db.VarChar(255)
+  create_time        DateTime             @db.DateTime(0)
+  edit_time          DateTime             @db.DateTime(0)
+  create_user        Int                  @default(0)
+  edit_user          Int                  @default(0)
+  del                Int                  @default(0)
+  company_consortium company_consortium[]
+}
+
+model gantt {
+  id          Int      @id @default(autoincrement())
+  create_time DateTime @db.DateTime(0)
+  edit_time   DateTime @db.DateTime(0)
+  create_user Int      @default(0)
+  edit_user   Int      @default(0)
+  del         Int      @default(0)
+}
+
+model gantt_task {
+  id          Int      @id @default(autoincrement())
+  create_time DateTime @db.DateTime(0)
+  edit_time   DateTime @db.DateTime(0)
+  create_user Int      @default(0)
+  edit_user   Int      @default(0)
+  del         Int      @default(0)
+}
+
+model historical_weather {
+  id                       Int             @id @default(autoincrement())
+  weather_station_id       Int
+  time                     DateTime        @db.DateTime(0)
+  rain                     Float           @default(0)
+  soil_temperature0_to7_cm Float           @default(0)
+  soil_moisture0_to7_cm    Float           @default(0)
+  create_time              DateTime        @db.DateTime(0)
+  edit_time                DateTime        @db.DateTime(0)
+  create_user              Int             @default(0)
+  edit_user                Int             @default(0)
+  del                      Int             @default(0)
+  weather_station          weather_station @relation(fields: [weather_station_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_5AB866D29E475DA2")
+
+  @@index([weather_station_id], map: "IDX_5AB866D29E475DA2")
+}
+
+model job_position {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(255)
+  create_time DateTime   @db.DateTime(0)
+  edit_time   DateTime   @db.DateTime(0)
+  create_user Int        @default(0)
+  edit_user   Int        @default(0)
+  del         Int        @default(0)
+  app_user    app_user[]
+}
+
+model land {
+  id                              Int                               @id @default(autoincrement())
+  company_id                      Int
+  code                            String                            @db.VarChar(20)
+  name                            String                            @db.VarChar(255)
+  area                            Decimal?                          @db.Decimal(18, 2)
+  next_sample_date                DateTime?                         @db.Date
+  kml_url                         String?                           @db.VarChar(255)
+  image_url                       String?                           @db.VarChar(255)
+  lat                             Float?
+  lng                             Float?
+  create_time                     DateTime                          @db.DateTime(0)
+  edit_time                       DateTime                          @db.DateTime(0)
+  create_user                     Int                               @default(0)
+  edit_user                       Int                               @default(0)
+  del                             Int                               @default(0)
+  land_use_id                     Int?
+  weather_station_id              Int?
+  partial_data                    Boolean                           @default(false)
+  forecast_season1                Int?
+  forecast_season2                Int?
+  attention_level1                String?                           @db.VarChar(255)
+  attention_level2                String?                           @db.VarChar(255)
+  note1                           String?                           @db.VarChar(30)
+  note2                           String?                           @db.VarChar(30)
+  start_season1                   DateTime?                         @db.Date
+  end_season1                     DateTime?                         @db.Date
+  start_season2                   DateTime?                         @db.Date
+  end_season2                     DateTime?                         @db.Date
+  description                     String?                           @db.VarChar(500)
+  attachment                      attachment[]
+  biodiversity_report_land        biodiversity_report_land[]
+  land_use                        land_use?                         @relation(fields: [land_use_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_A800D5D86A94AA0A")
+  company                         company                           @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_A800D5D8979B1AD6")
+  weather_station                 weather_station?                  @relation(fields: [weather_station_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_A800D5D89E475DA2")
+  land_analyses                   land_analyses[]
+  land_chemical_physical_analyses land_chemical_physical_analyses[]
+  land_coordinate                 land_coordinate[]
+  land_quality                    land_quality[]
+
+  @@index([land_use_id], map: "IDX_A800D5D86A94AA0A")
+  @@index([company_id], map: "IDX_A800D5D8979B1AD6")
+  @@index([weather_station_id], map: "IDX_A800D5D89E475DA2")
+}
+
+model land_analyses {
+  id                                  Int       @id @default(autoincrement())
+  land_id                             Int
+  company_unique                      String    @db.VarChar(255)
+  land_unique                         String    @db.VarChar(255)
+  lng                                 Float
+  lat                                 Float
+  date                                DateTime  @db.Date
+  soil_type                           String?   @db.VarChar(255)
+  QBS_ar_index                        Int
+  Euedaphic_n_BF_site                 Decimal   @db.Decimal(5, 2)
+  Hemiedaphic_n_BF_site               Decimal   @db.Decimal(5, 2)
+  Epedaphic_n_BF_site                 Decimal   @db.Decimal(5, 2)
+  create_time                         DateTime  @db.DateTime(0)
+  edit_time                           DateTime  @db.DateTime(0)
+  create_user                         Int       @default(0)
+  edit_user                           Int       @default(0)
+  del                                 Int       @default(0)
+  id_sample                           String    @db.VarChar(255)
+  sampled_area_for_each_replicate_cm2 Float
+  data_owner                          String    @db.VarChar(255)
+  id_operator_name_email              String    @db.VarChar(255)
+  soil_type_wrb                       String?   @db.VarChar(255)
+  texture                             String?   @db.VarChar(255)
+  site_field                          String    @db.VarChar(255)
+  treatment                           Float
+  block                               String    @db.VarChar(255)
+  field_notes                         String?   @db.VarChar(255)
+  notes_juvenile_forms_family_doubts  String?   @db.VarChar(255)
+  country_code                        String    @db.VarChar(255)
+  project                             String    @db.VarChar(255)
+  extraction_method                   String    @db.VarChar(255)
+  extraction_days                     Int
+  land_use                            String?   @db.VarChar(255)
+  dominant_plant_species              String    @db.VarChar(255)
+  p_h_h2_o                            Float
+  p_h_kcl                             Float
+  p_h_ca_cl2                          Float
+  farming_system                      String    @db.VarChar(255)
+  tillage_sytem                       String    @db.VarChar(255)
+  last_tillage_event                  DateTime? @db.Date
+  cropping_system                     String    @db.VarChar(255)
+  fertilizer_type                     String    @db.VarChar(255)
+  last_fertilizer_application         DateTime? @db.Date
+  type_main_crop                      String    @db.VarChar(255)
+  irrigation_type                     String    @db.VarChar(255)
+  last_irrigation_event               DateTime? @db.Date
+  tillage_depth_cm                    Float
+  plant_protection_products           String    @db.VarChar(255)
+  last_ppp_application                DateTime? @db.Date
+  weight_mean                         Float
+  mean_of_qbs_ar_replicates           Float
+  st_err_mean_of_qbs_ar_replicates    Float
+  mean_of_qbs_ar_bf_replicates        Float
+  st_err_mean_of_qbs_ar_bf_replicates Float
+  qbs_ar_bf_index                     Float
+  spectral_analysis                   Float
+  variability_replicates_qbs_ar       Float
+  variability_replicates_qbs_ar_bf    Float
+  bf_shannon_h_mean_of_replicates     Float
+  st_err_shannon_mean                 Float
+  bf_shannon_site                     Float
+  bf_evenness_j_mean_of_replicates    Float
+  st_err_evenness_mean                Float
+  bf_evenness_site                    Float
+  bf_simpson_1_d_mean_of_replicates   Float
+  st_err_simpson_mean                 Float
+  bf_simpson_site                     Float
+  bf_richness_mean_of_replicates      Float
+  st_err_richness_mean                Float
+  bf_richness_site                    Float
+  epedaphic_n_bf_perc                 Float
+  st_err_epedaphic_n_bf_perc          Float
+  hemiedaphic_n_bf_perc               Float
+  st_err_hemiedaphic_n_bf_perc        Float
+  euedaphic_n_bf_perc                 Float
+  st_err_euedaphic_n_bf_perc          Float
+  ab_m_2_emi_1                        Float
+  st_err_ab_m_2_emi_1                 Float
+  ab_m_2_emi_2                        Float
+  st_err_ab_m_2_emi_2                 Float
+  ab_m_2_emi_4                        Float
+  st_err_ab_m_2_emi_4                 Float
+  ab_m_2_emi_5                        Float
+  st_err_ab_m_2_emi_5                 Float
+  ab_m_2_epedaphic                    Float
+  st_err_ab_m_2_epedaphic             Float
+  ab_m_2_emi_6                        Float
+  st_err_ab_m_2_emi_6                 Float
+  ab_m_2_emi_8                        Float
+  st_err_ab_m_2_emi_8                 Float
+  ab_m_2_emi_10                       Float
+  st_err_ab_m_2_emi_10                Float
+  ab_m_2_hemiedaphic                  Float
+  st_err_ab_m_2_hemiedaphic           Float
+  ab_m_2_emi_15                       Float
+  st_err_ab_m_2_emi_15                Float
+  ab_m_2_emi_20                       Float
+  st_err_ab_m_2_emi_20                Float
+  ab_m_2_euedaphic                    Float
+  st_err_ab_m_2_euedaphic             Float
+  tot_ab_m_2                          Float
+  st_err_tot_ab_m_2                   Float
+  tot_abund_kg_1                      Float
+  st_err_tot_abund_kg_1               Float
+  oribatida                           Float
+  acari_20_m_2                        Float
+  araneae_01_m_2                      Float
+  araneae_05_m_2                      Float
+  pseudoscorp_20_m_2                  Float
+  opiliones_10_m_2                    Float
+  palpigradi_20_m_2                   Float
+  isopoda_10_m_2                      Float
+  symphyla_20_m_2                     Float
+  diplopoda_10_m_2                    Float
+  diplopoda_20_m_2                    Float
+  chilopoda_10_m_2                    Float
+  chilopoda_20_m_2                    Float
+  pauropoda_20_m_2                    Float
+  collembola_01_m_2                   Float
+  collembola_02_m_2                   Float
+  collembola_04_m_2                   Float
+  collembola_06_m_2                   Float
+  collembola_08_m_2                   Float
+  collembola_10_m_2                   Float
+  collembola_20_m_2                   Float
+  diplura_20_m_2                      Float
+  protura_20_m_2                      Float
+  coleoptera_01_m_2                   Float
+  coleoptera_05_m_2                   Float
+  coleoptera_10_m_2                   Float
+  coleoptera_15_m_2                   Float
+  coleoptera_20_m_2                   Float
+  coleoptera_l_10_m_2                 Float
+  diptera_01_m_2                      Float
+  diptera_l_10_m_2                    Float
+  hymenoptera_01_m_2                  Float
+  hymenoptera_05_m_2                  Float
+  hemiptera_01_m_2                    Float
+  psocoptera_01_m_2                   Float
+  thysanoptera_01_m_2                 Float
+  embioptera_10_m_2                   Float
+  dermaptera_01_m_2                   Float
+  scorpiones_extra_bf_10_m_2          Float
+  solifugae_extra_bf_10_m_2           Float
+  amphipoda_extra_bf_10_m_2           Float
+  hymenoptera_extra_bf_l_10_m_2       Float
+  hemiptera_extra_bf_n_10_m_2         Float
+  blattodea_extra_bf_05_m_2           Float
+  archaeognatha_extra_bf_10_m_2       Float
+  lepidoptera_extra_bf_l_10_m_2       Float
+  zygentoma_extra_bf_10_m_2           Float
+  orthoptera_extra_bf_01_m_2          Float
+  orthoptera_extra_bf_20_m_2          Float
+  mecoptera_extra_bf_01_m_2           Float
+  mecoptera_extra_bf_l_10_m_2         Float
+  neuroptera_extra_bf_01_m_2          Float
+  neuroptera_extra_bf_l_10_m_2        Float
+  raphidioptera_extra_bf_01_m_2       Float
+  raphidioptera_extra_bf_l_10_m_2     Float
+  other_bf_m_2                        Float
+  path                                String    @db.VarChar(255)
+  land                                land      @relation(fields: [land_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_962BC5861994904A")
+
+  @@index([land_id], map: "IDX_962BC5861994904A")
+}
+
+model land_chemical_physical_analyses {
+  id             Int      @id @default(autoincrement())
+  land_id        Int
+  company_unique String   @db.VarChar(255)
+  land_unique    String   @db.VarChar(255)
+  date           DateTime @db.Date
+  ph             Float
+  ph_min         Float?
+  ph_max         Float?
+  soc            Float
+  soc_min        Float?
+  soc_max        Float?
+  n              Float
+  n_min          Float?
+  n_max          Float?
+  sand           Float
+  sand_min       Float?
+  sand_max       Float?
+  silt           Float
+  silt_min       Float?
+  silt_max       Float?
+  clay           Float
+  clay_min       Float?
+  clay_max       Float?
+  create_time    DateTime @db.DateTime(0)
+  edit_time      DateTime @db.DateTime(0)
+  create_user    Int      @default(0)
+  edit_user      Int      @default(0)
+  del            Int      @default(0)
+  tco2e          Float?
+  path           String   @db.VarChar(255)
+  mg             Float?
+  k              Float?
+  p              Float?
+  mg_k           Float?
+  c_n            Float?
+  csc            Float?
+  so             Float?
+  land           land     @relation(fields: [land_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_83A764211994904A")
+
+  @@index([land_id], map: "IDX_83A764211994904A")
+}
+
+model land_coordinate {
+  id          Int      @id @default(autoincrement())
+  land_id     Int?
+  latitude    Float
+  longitude   Float
+  sorting     Int
+  create_time DateTime @db.DateTime(0)
+  edit_time   DateTime @db.DateTime(0)
+  create_user Int      @default(0)
+  edit_user   Int      @default(0)
+  del         Int      @default(0)
+  land        land?    @relation(fields: [land_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_DDDBFBA51994904A")
+
+  @@index([land_id], map: "IDX_DDDBFBA51994904A")
+}
+
+model land_quality {
+  id             Int      @id @default(autoincrement())
+  land_id        Int?
+  company_unique String   @db.VarChar(255)
+  land_unique    String   @db.VarChar(255)
+  date           DateTime @db.Date
+  quality_class  Int
+  judgment       String   @db.VarChar(255)
+  create_time    DateTime @db.DateTime(0)
+  edit_time      DateTime @db.DateTime(0)
+  create_user    Int      @default(0)
+  edit_user      Int      @default(0)
+  del            Int      @default(0)
+  path           String   @db.VarChar(255)
+  land           land?    @relation(fields: [land_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_64AE7F711994904A")
+
+  @@index([land_id], map: "IDX_64AE7F711994904A")
+}
+
+model land_use {
+  id             Int        @id @default(autoincrement())
+  parent_id      Int?
+  code           String     @db.VarChar(255)
+  list_index     String?    @db.VarChar(5)
+  create_time    DateTime   @db.DateTime(0)
+  edit_time      DateTime   @db.DateTime(0)
+  create_user    Int        @default(0)
+  edit_user      Int        @default(0)
+  del            Int        @default(0)
+  land           land[]
+  land_use       land_use?  @relation("land_useToland_use", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_697598C6727ACA70")
+  other_land_use land_use[] @relation("land_useToland_use")
+
+  @@index([parent_id], map: "IDX_697598C6727ACA70")
+}
+
+model menu_area {
+  id             Int              @id @default(autoincrement())
+  name           String           @db.VarChar(255)
+  icon           String?          @db.LongText
+  sorting        Int?             @default(0)
+  type           Int?
+  roles          Json?
+  create_time    DateTime         @db.DateTime(0)
+  edit_time      DateTime         @db.DateTime(0)
+  create_user    Int              @default(0)
+  edit_user      Int              @default(0)
+  del            Int              @default(0)
+  menu_area_link menu_area_link[]
+}
+
+model menu_area_link {
+  id           Int        @id @default(autoincrement())
+  menu_area_id Int?
+  name         String     @db.VarChar(255)
+  url          String     @db.VarChar(255)
+  sorting      Int
+  roles        Json?
+  create_time  DateTime   @db.DateTime(0)
+  edit_time    DateTime   @db.DateTime(0)
+  create_user  Int        @default(0)
+  edit_user    Int        @default(0)
+  del          Int        @default(0)
+  menu_area    menu_area? @relation(fields: [menu_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_EDA9D1DA35D45D22")
+
+  @@index([menu_area_id], map: "IDX_EDA9D1DA35D45D22")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model notification {
+  id                 String   @id @db.Char(36)
+  user_id            Int?
+  notification_class String   @db.VarChar(255)
+  notification_html  String   @db.VarChar(255)
+  resource_id        Int
+  create_time        DateTime @db.DateTime(0)
+  account            account? @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_BF5476CAA76ED395")
+
+  @@index([user_id], map: "IDX_BF5476CAA76ED395")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model reset_password_request {
+  id           Int      @id @default(autoincrement())
+  user_id      Int
+  selector     String   @db.VarChar(20)
+  hashed_token String   @db.VarChar(100)
+  requested_at DateTime @db.DateTime(0)
+  expires_at   DateTime @db.DateTime(0)
+  account      account  @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_7CE748AA76ED395")
+
+  @@index([user_id], map: "IDX_7CE748AA76ED395")
+}
+
+model soil_quality_range {
+  id          Int      @id @default(autoincrement())
+  parameter   String   @db.VarChar(50)
+  value_min   Float    @default(0)
+  value_max   Float    @default(0)
+  unit        String?  @db.VarChar(20)
+  create_time DateTime @db.DateTime(0)
+  edit_time   DateTime @db.DateTime(0)
+  create_user Int      @default(0)
+  edit_user   Int      @default(0)
+  del         Int      @default(0)
+}
+
+model system_language {
+  id          Int      @id @default(autoincrement())
+  code        String   @db.VarChar(2)
+  name        String   @db.VarChar(255)
+  create_time DateTime @db.DateTime(0)
+  edit_time   DateTime @db.DateTime(0)
+  create_user Int      @default(0)
+  edit_user   Int      @default(0)
+  del         Int      @default(0)
+  active      Boolean  @default(true)
+}
+
+model system_settings {
+  id                              Int      @id @default(autoincrement())
+  system_email_sender             String   @db.VarChar(255)
+  system_email_sender_name        String?  @db.VarChar(150)
+  system_bcc_email                String?  @db.VarChar(255)
+  default_language                String?  @db.VarChar(2)
+  current_version                 String?  @db.VarChar(10)
+  email_delivery_whitelist_status Int?     @default(0)
+  email_delivery_whitelist        String?  @db.VarChar(255)
+  upsert_last_filters             Boolean  @default(false)
+  public_area                     Boolean? @default(false)
+  company_name                    String?  @db.VarChar(200)
+  contact_email                   String?  @db.VarChar(200)
+  website                         String?  @db.VarChar(200)
+  additional_info                 String?  @db.VarChar(200)
+  logo                            String?  @db.VarChar(255)
+  work_in_progress_enabled        Boolean? @default(true)
+  work_in_progress_login_enabled  Boolean? @default(true)
+  work_in_progress_title          String?  @db.VarChar(255)
+  work_in_progress_subtitle       String?  @db.VarChar(255)
+  work_in_progress_background     String?  @db.VarChar(255)
+}
+
+model translation {
+  id          Int    @id @default(autoincrement())
+  domain      String @db.VarChar(255)
+  locale      String @db.VarChar(2)
+  trans_key   String @db.VarChar(255)
+  translation String @db.LongText
+}
+
+model user_data_table_filters {
+  id                  Int      @id @default(autoincrement())
+  user_id             Int
+  type                String   @db.VarChar(100)
+  route               String   @db.VarChar(255)
+  filters             String?  @db.LongText
+  insert_timestamp    DateTime @map("_insert_timestamp") @db.DateTime(0)
+  last_edit_timestamp DateTime @map("_last_edit_timestamp") @db.DateTime(0)
+}
+
+model weather_station {
+  id                 Int                  @id @default(autoincrement())
+  latitude           Float
+  longitude          Float
+  create_time        DateTime             @db.DateTime(0)
+  edit_time          DateTime             @db.DateTime(0)
+  create_user        Int                  @default(0)
+  edit_user          Int                  @default(0)
+  del                Int                  @default(0)
+  historical_weather historical_weather[]
+  land               land[]
 }
