@@ -4,5 +4,10 @@
   "globalSetup": "./.jest/globalSetup.js",
   "globalTeardown": "./.jest/globalTeardown.js",
   "rootDir": "./",
-  "setupFiles": ["dotenv/config"]
+  "setupFiles": [
+    "dotenv/config"
+  ],
+  "maxWorkers": 1,
+  "testTimeout": 300000,
+  "bail": 1
 }
