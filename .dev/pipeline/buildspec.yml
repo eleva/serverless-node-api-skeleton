@@ -11,7 +11,7 @@ phases:
       # Install redocly globally
       - npm install -g @redocly/cli
       # Install dependencies
-      - npm install && npm run layer-dependencies-install && npm run layer-shared-install
+      - npm install && npm run layer-dependencies-install && npm run layer-prisma-generate && npm run layer-shared-install
       # Prisma client generation
       - npx prisma generate
       # Configure serverless cli user

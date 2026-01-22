@@ -10,6 +10,7 @@
     "doc": "sls openapi generate -o ./doc/build/openapi.yaml -a 3.0.3 -f yaml && sls openapi generate -o ./doc/build/openapi.json -a 3.0.3 -f json -p ./doc/build/postman.json && redocly lint ./doc/build/openapi.yaml --generate-ignore-file && redocly build-docs ./doc/build/openapi.yaml --output=./doc/build/index.html",
     "db": "cd .dev/docker && docker stop $(docker ps -aq) && docker compose build && docker compose up -d",
     "layer-dependencies-install": "cd src/layer/dependencies/nodejs && npm install",
+    "layer-prisma-generate": "cd src/layer/dependencies/nodejs && npx prisma generate --schema=../../../../prisma/schema.prisma",
     "layer-shared-install": "cd src/layer/shared/nodejs/node_modules/my-api-utils && npm install"
   },
   "author": "d.desio@eleva.it",
