@@ -7,6 +7,7 @@ hello:
   events: #events
     #keep warm event
     - schedule:
+        method: scheduler
         rate: rate(5 minutes)
         enabled: ${strToBool(${self:custom.scheduleEnabled.${env:STAGE_NAME}})}
         input:
