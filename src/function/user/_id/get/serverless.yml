@@ -6,6 +6,7 @@ getUserById:
       - src/function/user/_id/get/**
   events:
     - schedule:
+        method: scheduler
         rate: rate(5 minutes)
         enabled: ${strToBool(${self:custom.scheduleEnabled.${env:STAGE_NAME}})}
         input:
